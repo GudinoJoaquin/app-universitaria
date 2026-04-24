@@ -14,51 +14,72 @@ import EventDetailsScreen from "../screens/EventDetailScreen";
 import EventCreateScreen from "../screens/EventCreateScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import MisEventScreen from "../screens/MisEventScreen";
+import FirstTimeSetupScreen from "../screens/FirstTimeSetupScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Tab Navigator para las pantallas principales (perfil,eventos,MisEventos)
+// Tab Navigator para las pantallas principales
+import { Ionicons } from "@expo/vector-icons";
+import { Platform } from "react-native";
+
 function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: "#3B82F6",
-        tabBarInactiveTintColor: "#8E8E93",
+        tabBarActiveTintColor: "#2563EB",
+        tabBarInactiveTintColor: "#9CA3AF",
+        tabBarShowLabel: true,
         tabBarStyle: {
-          paddingBottom: 5,
-          height: 60,
+          paddingBottom: Platform.OS === 'ios' ? 25 : 15,
+          paddingTop: 8,
+          height: Platform.OS === 'ios' ? 85 : 75,
+          borderTopWidth: 0,
+          elevation: 10,
+          shadowColor: "#000",
+          shadowOpacity: 0.1,
+          shadowOffset: { width: 0, height: -2 },
+          backgroundColor: "#ffffff",
+          marginBottom: Platform.OS === 'android' ? 10 : 0, // Separación extra de la barra de gestos
+          borderRadius: Platform.OS === 'android' ? 20 : 0, // Para que se vea como píldora si tiene margen
+          marginHorizontal: Platform.OS === 'android' ? 15 : 0,
+          position: Platform.OS === 'android' ? 'absolute' : 'relative',
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: "600",
         },
         headerShown: false,
       }}
+      sceneContainerStyle={{ backgroundColor: "#F8FAFC" }}
     >
       <Tab.Screen
         name="EventsTab"
         component={EventsScreen}
         options={{
           title: "Eventos",
-          tabBarIcon: ({ color, size }) => (
-            <Text style={{ color, fontSize: size }}></Text>
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "calendar" : "calendar-outline"} color={color} size={26} />
           ),
         }}
       />
-      <Tab.Screen>
+      <Tab.Screen
         name="MisEventosTab"
         component={MisEventScreen}
-          options={{
+        options={{
           title: "Mis Eventos",
-          tabBarIcon: ({ color, size }) => (
-            <Text style={{ color, fontSize: size }}></Text>
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "bookmarks" : "bookmarks-outline"} color={color} size={26} />
           ),
         }}
-      </Tab.Screen>
+      />
       <Tab.Screen
         name="ProfileTab"
         component={ProfileScreen}
         options={{
           title: "Perfil",
-          tabBarIcon: ({ color, size }) => (
-            <Text style={{ color, fontSize: size }}></Text>
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "person-circle" : "person-circle-outline"} color={color} size={28} />
           ),
         }}
       />
@@ -66,19 +87,33 @@ function MainTabs() {
   );
 }
 
+import * as Linking from 'expo-linking';
+
 export default function AppNavigator() {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text>Cargando...</Text>
-      </View>
-    );
-  }
+  const linking = {
+    prefixes: [Linking.createURL("/")],
+    config: {
+      screens: {
+        Login: "login",
+        Register: "register",
+        MainTabs: {
+          screens: {
+            EventsTab: "events",
+            MisEventosTab: "miseventos",
+            ProfileTab: "profile",
+          },
+        },
+      },
+    },
+  };
+
+  // Eliminamos la pantalla de carga blanca global,
+  // permitiendo que se renderice el Login inmediatamente y luego navegue solo si hay sesión.
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <Stack.Navigator>
         {!user ? (
           // pantalla para los usuarios no registrados
@@ -98,8 +133,17 @@ export default function AppNavigator() {
               }}
             />
           </>
+        ) : user.user_metadata?.has_completed_setup !== true ? (
+          // pantalla obligatoria para completar perfil la primera vez
+          <Stack.Screen
+            name="FirstTimeSetup"
+            component={FirstTimeSetupScreen}
+            options={{
+              headerShown: false,
+            }}
+          />
         ) : (
-          // pantalla para los usuarios registrados
+          // pantalla para los usuarios registrados que ya completaron el setup
           <>
             <Stack.Screen
               name="MainTabs"

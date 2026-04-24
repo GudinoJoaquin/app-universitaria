@@ -1,69 +1,107 @@
-import API from "./api";
+import { supabase } from "./supabase";
 
-//funciones principales de los eventos
 export const eventsService = {
-  // Obtener todos los eventos
   getEvents: async () => {
     try {
-      console.log(" Obteniendo eventos...");
-      const response = await API.get("/events");
-      console.log(" Eventos obtenidos:", response.data);
-      return response.data;
+      console.log(" Obteniendo eventos de Supabase...");
+      const { data, error } = await supabase
+        .from('events')
+        .select(`
+          *,
+          profiles:created_by (name)
+        `)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      
+      // Formatear para que coincida con el frontend actual
+      const formattedEvents = data.map(event => ({
+        ...event,
+        created_by_name: event.profiles?.name || 'Desconocido'
+      }));
+      
+      return { success: true, events: formattedEvents };
     } catch (error) {
       console.log(" Error obteniendo eventos:", error);
-      throw error.response?.data || { message: "Error al obtener eventos" };
+      throw error;
     }
   },
 
-  // Obtener un evento específico
   getEventById: async (id) => {
     try {
-      console.log("📡 Obteniendo evento:", id);
-      const response = await API.get(`/events/${id}`);
-      console.log(" Evento obtenido:", response.data);
-      return response.data;
+      const { data, error } = await supabase
+        .from('events')
+        .select(`
+          *,
+          profiles:created_by (name)
+        `)
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      
+      const event = {
+        ...data,
+        created_by_name: data.profiles?.name || 'Desconocido'
+      };
+      
+      return { success: true, event };
     } catch (error) {
       console.log(" Error obteniendo evento:", error);
-      throw error.response?.data || { message: "Error al obtener evento" };
+      throw error;
     }
   },
 
-  // Crear nuevo evento
   createEvent: async (eventData) => {
     try {
-      console.log(" Creando evento:", eventData);
-      const response = await API.post("/events", eventData);
-      console.log(" Evento creado:", response.data);
-      return response.data;
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) throw new Error("No autenticado");
+
+      const { data, error } = await supabase
+        .from('events')
+        .insert([
+          { ...eventData, created_by: userData.user.id }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { success: true, event: data };
     } catch (error) {
       console.log(" Error creando evento:", error);
-      throw error.response?.data || { message: "Error al crear evento" };
+      throw error;
     }
   },
 
-  // Actualizar evento
   updateEvent: async (id, eventData) => {
     try {
-      console.log(" Actualizando evento:", id, eventData);
-      const response = await API.put(`/events/${id}`, eventData);
-      console.log(" Evento actualizado:", response.data);
-      return response.data;
+      const { data, error } = await supabase
+        .from('events')
+        .update(eventData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { success: true, event: data };
     } catch (error) {
       console.log(" Error actualizando evento:", error);
-      throw error.response?.data || { message: "Error al actualizar evento" };
+      throw error;
     }
   },
 
-  // Eliminar evento
   deleteEvent: async (id) => {
     try {
-      console.log(" Eliminando evento:", id);
-      const response = await API.delete(`/events/${id}`);
-      console.log(" Evento eliminado:", response.data);
-      return response.data;
+      const { error } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return { success: true };
     } catch (error) {
       console.log(" Error eliminando evento:", error);
-      throw error.response?.data || { message: "Error al eliminar evento" };
+      throw error;
     }
   },
 };
