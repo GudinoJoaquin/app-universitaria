@@ -42,7 +42,7 @@ export default function EventsScreen({ navigation }) {
     } catch (error) {
       Alert.alert(
         "Error",
-        error.message || "No se pudieron cargar los eventos"
+        error.message || "No se pudieron cargar los eventos",
       );
       console.log("Error loading events:", error);
     } finally {
@@ -69,31 +69,68 @@ export default function EventsScreen({ navigation }) {
 
   const getRoleInfo = (role) => {
     switch (role) {
-      case "admin": return { name: "Admin", emoji: "👑", color: "#EF4444", bg: "#FEE2E2" };
-      case "teacher": return { name: "Docente", emoji: "👨‍🏫", color: "#3B82F6", bg: "#DBEAFE" };
-      case "student": return { name: "Estudiante", emoji: "", color: "#4B5563", bg: "#F3F4F6" };
-      default: return { name: role || "Usuario", emoji: "", color: "#6B7280", bg: "#F3F4F6" };
+      case "admin":
+        return { name: "Admin", emoji: "👑", color: "#EF4444", bg: "#FEE2E2" };
+      case "teacher":
+        return {
+          name: "Docente",
+          emoji: "👨‍🏫",
+          color: "#3B82F6",
+          bg: "#DBEAFE",
+        };
+      case "student":
+        return {
+          name: "Estudiante",
+          emoji: "",
+          color: "#4B5563",
+          bg: "#F3F4F6",
+        };
+      default:
+        return {
+          name: role || "Usuario",
+          emoji: "",
+          color: "#6B7280",
+          bg: "#F3F4F6",
+        };
     }
   };
 
   const formatEventDate = (dateString) => {
-    const date = new Date(dateString);
+    // Convertir YYYY-MM-DD HH:MM:SS+00 a ISO format YYYY-MM-DDTHH:MM:SSZ
+    // Remover cualquier sufijo de zona horaria (+00, -03:00, Z, etc.)
+    let cleanDate = dateString
+      .replace(/[\s]*[\+\-]\d{2}:\d{2}$/, "")
+      .replace(/Z$/, "")
+      .trim();
+    let isoDate = cleanDate.replace(" ", "T") + "Z";
+    const date = new Date(isoDate);
     return {
       date: date.toLocaleDateString("es-ES", {
         day: "numeric",
         month: "long",
         year: "numeric",
+        timeZone: "UTC",
       }),
       time: date.toLocaleTimeString("es-ES", {
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: "UTC",
       }),
-      day: date.toLocaleDateString("es-ES", { weekday: "long" }),
+      day: date.toLocaleDateString("es-ES", {
+        weekday: "long",
+        timeZone: "UTC",
+      }),
     };
   };
 
   const getEventStatus = (eventDate) => {
-    const date = new Date(eventDate);
+    // Convertir YYYY-MM-DD HH:MM:SS+00 a ISO format
+    let cleanDate = eventDate
+      .replace(/[\s]*[\+\-]\d{2}:\d{2}$/, "")
+      .replace(/Z$/, "")
+      .trim();
+    let isoDate = cleanDate.replace(" ", "T") + "Z";
+    const date = new Date(isoDate);
     const now = new Date();
     const timeDiff = date.getTime() - now.getTime();
     const daysDiff = timeDiff / (1000 * 3600 * 24);
@@ -128,9 +165,9 @@ export default function EventsScreen({ navigation }) {
       <LinearGradient colors={["#1E3A8A", "#3B82F6"]} style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.userInfo}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => navigation.navigate("ProfileTab")}
-              style={[styles.avatar, { padding: 0, overflow: 'hidden' }]}
+              style={[styles.avatar, { padding: 0, overflow: "hidden" }]}
             >
               {avatarUrl ? (
                 <Image
@@ -146,10 +183,15 @@ export default function EventsScreen({ navigation }) {
               )}
             </TouchableOpacity>
             <View style={styles.userDetails}>
-              <Text style={styles.welcomeText}>¡Hola, {user?.name?.split(" ")[0] || "Usuario"}! 👋</Text>
-              <View style={[styles.roleBadge, { backgroundColor: roleInfo.bg }]}>
+              <Text style={styles.welcomeText}>
+                ¡Hola, {user?.name?.split(" ")[0] || "Usuario"}! 👋
+              </Text>
+              <View
+                style={[styles.roleBadge, { backgroundColor: roleInfo.bg }]}
+              >
                 <Text style={[styles.roleBadgeText, { color: roleInfo.color }]}>
-                  {roleInfo.emoji ? `${roleInfo.emoji} ` : ""}{roleInfo.name}
+                  {roleInfo.emoji ? `${roleInfo.emoji} ` : ""}
+                  {roleInfo.name}
                 </Text>
               </View>
             </View>
@@ -195,15 +237,24 @@ export default function EventsScreen({ navigation }) {
                 {/* Header de la tarjeta con estado */}
                 <View style={styles.eventHeader}>
                   <View style={styles.eventTitleContainer}>
-                    <Text style={styles.eventTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.eventTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
                     <View
                       style={[
                         styles.statusBadge,
                         { backgroundColor: `${status.color}15` },
                       ]}
                     >
-                      <View style={[styles.statusDot, { backgroundColor: status.color }]} />
-                      <Text style={[styles.statusText, { color: status.color }]}>
+                      <View
+                        style={[
+                          styles.statusDot,
+                          { backgroundColor: status.color },
+                        ]}
+                      />
+                      <Text
+                        style={[styles.statusText, { color: status.color }]}
+                      >
                         {status.label}
                       </Text>
                     </View>
@@ -217,30 +268,48 @@ export default function EventsScreen({ navigation }) {
                 <View style={styles.eventDetails}>
                   <View style={styles.detailRow}>
                     <View style={styles.detailIconBox}>
-                      <Ionicons name="calendar-outline" size={18} color="#6366F1" />
+                      <Ionicons
+                        name="calendar-outline"
+                        size={18}
+                        color="#6366F1"
+                      />
                     </View>
                     <View style={styles.detailTextContainer}>
                       <Text style={styles.detailValueBold}>{day}</Text>
-                      <Text style={styles.detailValueSub}>{date} • {time}</Text>
+                      <Text style={styles.detailValueSub}>
+                        {date} • {time}
+                      </Text>
                     </View>
                   </View>
 
                   <View style={styles.detailRow}>
                     <View style={styles.detailIconBox}>
-                      <Ionicons name="location-outline" size={18} color="#EF4444" />
+                      <Ionicons
+                        name="location-outline"
+                        size={18}
+                        color="#EF4444"
+                      />
                     </View>
                     <View style={styles.detailTextContainer}>
-                      <Text style={styles.detailValueBold} numberOfLines={1}>{item.location}</Text>
+                      <Text style={styles.detailValueBold} numberOfLines={1}>
+                        {item.location}
+                      </Text>
                       <Text style={styles.detailValueSub}>Ubicación</Text>
                     </View>
                   </View>
 
                   <View style={styles.detailRow}>
                     <View style={styles.detailIconBox}>
-                      <Ionicons name="person-outline" size={18} color="#10B981" />
+                      <Ionicons
+                        name="person-outline"
+                        size={18}
+                        color="#10B981"
+                      />
                     </View>
                     <View style={styles.detailTextContainer}>
-                      <Text style={styles.detailValueBold} numberOfLines={1}>{item.created_by_name}</Text>
+                      <Text style={styles.detailValueBold} numberOfLines={1}>
+                        {item.created_by_name}
+                      </Text>
                       <Text style={styles.detailValueSub}>Organizador</Text>
                     </View>
                   </View>
@@ -260,7 +329,11 @@ export default function EventsScreen({ navigation }) {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconContainer}>
-                <Ionicons name="calendar-clear-outline" size={64} color="#9CA3AF" />
+                <Ionicons
+                  name="calendar-clear-outline"
+                  size={64}
+                  color="#9CA3AF"
+                />
               </View>
               <Text style={styles.emptyTitle}>No hay eventos programados</Text>
               <Text style={styles.emptyDescription}>
@@ -300,7 +373,11 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
   },
-  headerContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   userInfo: { flexDirection: "row", alignItems: "center" },
   avatar: {
     width: 56,
@@ -311,16 +388,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 16,
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.4)"
+    borderColor: "rgba(255,255,255,0.4)",
   },
   avatarText: { color: "white", fontSize: 24, fontWeight: "bold" },
   userDetails: { justifyContent: "center" },
-  welcomeText: { color: "white", fontSize: 22, fontWeight: "bold", marginBottom: 4 },
-  roleBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, alignSelf: "flex-start" },
+  welcomeText: {
+    color: "white",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  roleBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
   roleBadgeText: { fontSize: 12, fontWeight: "bold" },
   content: { flex: 1, paddingTop: 16 },
   sectionHeader: { paddingHorizontal: 24, marginBottom: 16 },
-  sectionTitle: { fontSize: 22, fontWeight: "800", color: "#1F2937", marginBottom: 4 },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
   sectionSubtitle: { fontSize: 14, color: "#6B7280" },
   listContent: { paddingHorizontal: 24, paddingBottom: 100 },
   eventCard: {
@@ -334,22 +426,57 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
     borderWidth: 1,
-    borderColor: "#F1F5F9"
+    borderColor: "#F1F5F9",
   },
   eventHeader: { marginBottom: 16 },
-  eventTitleContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  eventTitle: { flex: 1, fontSize: 18, fontWeight: "bold", color: "#1F2937", marginRight: 12, lineHeight: 24 },
-  statusBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+  eventTitleContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  eventTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginRight: 12,
+    lineHeight: 24,
+  },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
   statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
   statusText: { fontSize: 12, fontWeight: "700" },
   divider: { height: 1, backgroundColor: "#F3F4F6", marginBottom: 16 },
   eventDetails: { gap: 16 },
   detailRow: { flexDirection: "row", alignItems: "center" },
-  detailIconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#F8FAFC", justifyContent: "center", alignItems: "center", marginRight: 12 },
+  detailIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
   detailTextContainer: { flex: 1 },
-  detailValueBold: { fontSize: 14, fontWeight: "700", color: "#374151", marginBottom: 2 },
+  detailValueBold: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#374151",
+    marginBottom: 2,
+  },
   detailValueSub: { fontSize: 12, color: "#9CA3AF" },
-  descriptionContainer: { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: "#F3F4F6" },
+  descriptionContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
   descriptionText: { fontSize: 14, color: "#6B7280", lineHeight: 20 },
   fab: {
     position: "absolute",
@@ -367,11 +494,55 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
-  emptyState: { alignItems: "center", justifyContent: "center", paddingVertical: 60, paddingHorizontal: 32 },
-  emptyIconContainer: { width: 120, height: 120, borderRadius: 60, backgroundColor: "#F3F4F6", justifyContent: "center", alignItems: "center", marginBottom: 24 },
-  emptyTitle: { fontSize: 18, fontWeight: "bold", color: "#1F2937", marginBottom: 12, textAlign: "center" },
-  emptyDescription: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 22 },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F8FAFC" },
-  loadingContent: { alignItems: "center", backgroundColor: "white", padding: 32, borderRadius: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
-  loadingText: { fontSize: 16, fontWeight: "600", color: "#4B5563", marginBottom: 16 }
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1F2937",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  emptyDescription: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+  },
+  loadingContent: {
+    alignItems: "center",
+    backgroundColor: "white",
+    padding: 32,
+    borderRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#4B5563",
+    marginBottom: 16,
+  },
 });

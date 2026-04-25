@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   buttonContent: { flex: 1 },
   actionButtonTitle: { fontSize: 16, fontWeight: "bold", color: "#1F2937", marginBottom: 2 },
   actionButtonSubtitle: { fontSize: 13, color: "#6B7280" },
-  footerSection: { paddingHorizontal: 24, paddingTop: 40, alignItems: "center" },
+  footerSection: { paddingHorizontal: 24, paddingTop: 40, paddingBottom: 20, alignItems: "center" },
   logoutButton: {
     flexDirection: "row",
     backgroundColor: "#FEF2F2",

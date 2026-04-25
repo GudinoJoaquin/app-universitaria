@@ -41,7 +41,7 @@ export default function EventDetailsScreen({ route, navigation }) {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -53,18 +53,38 @@ export default function EventDetailsScreen({ route, navigation }) {
         { text: "Cancelar", style: "cancel" },
         {
           text: "Agregar",
-          onPress: () => Alert.alert("Éxito", "Evento agregado a tu calendario"),
+          onPress: () =>
+            Alert.alert("Éxito", "Evento agregado a tu calendario"),
         },
-      ]
+      ],
     );
   };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
+    // Convertir YYYY-MM-DD HH:MM:SS+00 a ISO format YYYY-MM-DDTHH:MM:SSZ
+    // Remover cualquier sufijo de zona horaria (+00, -03:00, Z, etc.)
+    let cleanDate = dateString
+      .replace(/[\s]*[\+\-]\d{2}:\d{2}$/, "")
+      .replace(/Z$/, "")
+      .trim();
+    let isoDate = cleanDate.replace(" ", "T") + "Z";
+    const date = new Date(isoDate);
     return {
-      date: date.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }),
-      time: date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
-      day: date.toLocaleDateString("es-ES", { weekday: "long" }),
+      date: date.toLocaleDateString("es-ES", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      }),
+      time: date.toLocaleTimeString("es-ES", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "UTC",
+      }),
+      day: date.toLocaleDateString("es-ES", {
+        weekday: "long",
+        timeZone: "UTC",
+      }),
     };
   };
 
@@ -74,10 +94,37 @@ export default function EventDetailsScreen({ route, navigation }) {
     const timeDiff = date.getTime() - now.getTime();
     const daysDiff = timeDiff / (1000 * 3600 * 24);
 
-    if (daysDiff < 0) return { status: "past", label: "FINALIZADO", color: "#6B7280", bg: "#F3F4F6", icon: "time-outline" };
-    if (daysDiff <= 1) return { status: "urgent", label: "PRÓXIMAMENTE", color: "#DC2626", bg: "#FEE2E2", icon: "alert-circle-outline" };
-    if (daysDiff <= 7) return { status: "upcoming", label: "ESTA SEMANA", color: "#D97706", bg: "#FEF3C7", icon: "calendar-outline" };
-    return { status: "scheduled", label: "PROGRAMADO", color: "#059669", bg: "#D1FAE5", icon: "checkmark-circle-outline" };
+    if (daysDiff < 0)
+      return {
+        status: "past",
+        label: "FINALIZADO",
+        color: "#6B7280",
+        bg: "#F3F4F6",
+        icon: "time-outline",
+      };
+    if (daysDiff <= 1)
+      return {
+        status: "urgent",
+        label: "PRÓXIMAMENTE",
+        color: "#DC2626",
+        bg: "#FEE2E2",
+        icon: "alert-circle-outline",
+      };
+    if (daysDiff <= 7)
+      return {
+        status: "upcoming",
+        label: "ESTA SEMANA",
+        color: "#D97706",
+        bg: "#FEF3C7",
+        icon: "calendar-outline",
+      };
+    return {
+      status: "scheduled",
+      label: "PROGRAMADO",
+      color: "#059669",
+      bg: "#D1FAE5",
+      icon: "checkmark-circle-outline",
+    };
   };
 
   const eventDate = formatDate(event.date);
@@ -87,13 +134,26 @@ export default function EventDetailsScreen({ route, navigation }) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#3B82F6" />
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Header Blend with Navigation Bar */}
-        <LinearGradient colors={["#3B82F6", "#1E3A8A"]} style={styles.heroSection}>
+        <LinearGradient
+          colors={["#3B82F6", "#1E3A8A"]}
+          style={styles.heroSection}
+        >
           <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-            <Ionicons name={status.icon} size={16} color={status.color} style={{ marginRight: 6 }} />
-            <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+            <Ionicons
+              name={status.icon}
+              size={16}
+              color={status.color}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.statusText, { color: status.color }]}>
+              {status.label}
+            </Text>
           </View>
           <Text style={styles.title}>{event.title}</Text>
         </LinearGradient>
@@ -102,19 +162,25 @@ export default function EventDetailsScreen({ route, navigation }) {
         <View style={styles.floatingCardContainer}>
           <View style={styles.floatingCard}>
             <View style={styles.detailRow}>
-              <View style={[styles.detailIconBox, { backgroundColor: "#EFF6FF" }]}>
+              <View
+                style={[styles.detailIconBox, { backgroundColor: "#EFF6FF" }]}
+              >
                 <Ionicons name="calendar" size={24} color="#3B82F6" />
               </View>
               <View style={styles.detailContent}>
                 <Text style={styles.detailLabel}>Fecha</Text>
-                <Text style={styles.detailValue}>{eventDate.day}, {eventDate.date}</Text>
+                <Text style={styles.detailValue}>
+                  {eventDate.day}, {eventDate.date}
+                </Text>
               </View>
             </View>
 
             <View style={styles.divider} />
 
             <View style={styles.detailRow}>
-              <View style={[styles.detailIconBox, { backgroundColor: "#FEF2F2" }]}>
+              <View
+                style={[styles.detailIconBox, { backgroundColor: "#FEF2F2" }]}
+              >
                 <Ionicons name="time" size={24} color="#EF4444" />
               </View>
               <View style={styles.detailContent}>
@@ -126,7 +192,9 @@ export default function EventDetailsScreen({ route, navigation }) {
             <View style={styles.divider} />
 
             <View style={styles.detailRow}>
-              <View style={[styles.detailIconBox, { backgroundColor: "#ECFDF5" }]}>
+              <View
+                style={[styles.detailIconBox, { backgroundColor: "#ECFDF5" }]}
+              >
                 <Ionicons name="location" size={24} color="#10B981" />
               </View>
               <View style={styles.detailContent}>
@@ -142,7 +210,8 @@ export default function EventDetailsScreen({ route, navigation }) {
           <Text style={styles.sectionTitle}>Acerca del Evento</Text>
           <View style={styles.infoCard}>
             <Text style={styles.descriptionText}>
-              {event.description || "No hay descripción detallada disponible para este evento. Asiste para descubrir más."}
+              {event.description ||
+                "No hay descripción detallada disponible para este evento. Asiste para descubrir más."}
             </Text>
           </View>
         </View>
@@ -152,20 +221,36 @@ export default function EventDetailsScreen({ route, navigation }) {
           <Text style={styles.sectionTitle}>Detalles de Organización</Text>
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
-              <Ionicons name="person-circle-outline" size={22} color="#6B7280" style={{ width: 30 }} />
+              <Ionicons
+                name="person-circle-outline"
+                size={22}
+                color="#6B7280"
+                style={{ width: 30 }}
+              />
               <View style={{ flex: 1 }}>
                 <Text style={styles.infoLabel}>Organizador</Text>
-                <Text style={styles.infoValue}>{event.created_by_name || "Administración Universitaria"}</Text>
+                <Text style={styles.infoValue}>
+                  {event.created_by_name || "Administración Universitaria"}
+                </Text>
               </View>
             </View>
-            
+
             <View style={styles.divider} />
-            
+
             <View style={styles.infoRow}>
-              <Ionicons name="bookmark-outline" size={22} color="#6B7280" style={{ width: 30 }} />
+              <Ionicons
+                name="bookmark-outline"
+                size={22}
+                color="#6B7280"
+                style={{ width: 30 }}
+              />
               <View style={{ flex: 1 }}>
                 <Text style={styles.infoLabel}>Categoría</Text>
-                <Text style={styles.infoValue}>{event.type === "academico" ? "Evento Académico" : "Evento Universitario"}</Text>
+                <Text style={styles.infoValue}>
+                  {event.type === "academico"
+                    ? "Evento Académico"
+                    : "Evento Universitario"}
+                </Text>
               </View>
             </View>
           </View>
@@ -173,29 +258,51 @@ export default function EventDetailsScreen({ route, navigation }) {
 
         {/* Botones de Acción */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleAddToCalendar}>
-            <Ionicons name="calendar-number" size={20} color="white" style={{ marginRight: 10 }} />
-            <Text style={styles.primaryButtonText}>Agregar a mi Calendario</Text>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleAddToCalendar}
+          >
+            <Ionicons
+              name="calendar-number"
+              size={20}
+              color="white"
+              style={{ marginRight: 10 }}
+            />
+            <Text style={styles.primaryButtonText}>
+              Agregar a mi Calendario
+            </Text>
           </TouchableOpacity>
 
           {(user?.role === "admin" || user?.id === event.created_by) && (
             <View style={styles.adminActions}>
-              <TouchableOpacity 
-                style={styles.secondaryButton} 
+              <TouchableOpacity
+                style={styles.secondaryButton}
                 onPress={() => navigation.navigate("CreateEvent", { event })}
               >
-                <Ionicons name="create-outline" size={20} color="#3B82F6" style={{ marginRight: 8 }} />
+                <Ionicons
+                  name="create-outline"
+                  size={20}
+                  color="#3B82F6"
+                  style={{ marginRight: 8 }}
+                />
                 <Text style={styles.secondaryButtonText}>Editar</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.dangerButton} onPress={handleDeleteEvent}>
-                <Ionicons name="trash-outline" size={20} color="#EF4444" style={{ marginRight: 8 }} />
+              <TouchableOpacity
+                style={styles.dangerButton}
+                onPress={handleDeleteEvent}
+              >
+                <Ionicons
+                  name="trash-outline"
+                  size={20}
+                  color="#EF4444"
+                  style={{ marginRight: 8 }}
+                />
                 <Text style={styles.dangerButtonText}>Eliminar</Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
-
       </ScrollView>
     </View>
   );
@@ -222,7 +329,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   statusText: { fontSize: 12, fontWeight: "bold", textTransform: "uppercase" },
-  title: { fontSize: 28, fontWeight: "900", color: "white", marginBottom: 8, lineHeight: 34 },
+  title: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "white",
+    marginBottom: 8,
+    lineHeight: 34,
+  },
   floatingCardContainer: {
     paddingHorizontal: 20,
     marginTop: -40, // Sube la tarjeta para que pise el LinearGradient
@@ -247,11 +360,22 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   detailContent: { flex: 1 },
-  detailLabel: { fontSize: 12, color: "#6B7280", textTransform: "uppercase", fontWeight: "bold", marginBottom: 2 },
+  detailLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    textTransform: "uppercase",
+    fontWeight: "bold",
+    marginBottom: 2,
+  },
   detailValue: { fontSize: 16, fontWeight: "700", color: "#1F2937" },
   divider: { height: 1, backgroundColor: "#F3F4F6", marginVertical: 8 },
   section: { paddingHorizontal: 24, marginTop: 32 },
-  sectionTitle: { fontSize: 18, fontWeight: "800", color: "#1F2937", marginBottom: 16 },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1F2937",
+    marginBottom: 16,
+  },
   infoCard: {
     backgroundColor: "white",
     borderRadius: 24,
@@ -264,7 +388,13 @@ const styles = StyleSheet.create({
   },
   descriptionText: { fontSize: 15, color: "#4B5563", lineHeight: 24 },
   infoRow: { flexDirection: "row", alignItems: "center", marginVertical: 8 },
-  infoLabel: { fontSize: 12, color: "#6B7280", textTransform: "uppercase", fontWeight: "bold", marginBottom: 2 },
+  infoLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    textTransform: "uppercase",
+    fontWeight: "bold",
+    marginBottom: 2,
+  },
   infoValue: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   actionsContainer: { paddingHorizontal: 24, marginTop: 40 },
   primaryButton: {

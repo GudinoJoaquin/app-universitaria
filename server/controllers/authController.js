@@ -27,7 +27,7 @@ export const register = async (req, res) => {
     // Verificar si el usuario ya existe
     const [existingUsers] = await connection.execute(
       "SELECT id FROM users WHERE email = ?",
-      [email]
+      [email],
     );
 
     if (existingUsers.length > 0) {
@@ -43,14 +43,14 @@ export const register = async (req, res) => {
     // Insertar usuario nuevo
     const [result] = await connection.execute(
       "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
-      [name, email, hashedPassword, role]
+      [name, email, hashedPassword, role],
     );
 
     // Generar token
     const token = jwt.sign(
       { id: result.insertId, email, role },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "24h" }
+      { expiresIn: process.env.JWT_EXPIRES_IN || "24h" },
     );
 
     console.log(" Usuario registrado exitosamente:", result.insertId);
@@ -91,7 +91,7 @@ export const login = async (req, res) => {
     // Buscar usuario
     const [users] = await connection.execute(
       "SELECT * FROM users WHERE email = ?",
-      [email]
+      [email],
     );
 
     if (users.length === 0) {
@@ -127,7 +127,7 @@ export const login = async (req, res) => {
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" } 
+      { expiresIn: "24h" },
     );
 
     res.json({
@@ -154,7 +154,7 @@ export const getProfile = async (req, res) => {
     const connection = req.db;
     const [users] = await connection.execute(
       "SELECT id, name, email, role FROM users WHERE id = ?",
-      [req.user.id]
+      [req.user.id],
     );
 
     if (users.length === 0)
