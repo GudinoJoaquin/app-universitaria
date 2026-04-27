@@ -16,6 +16,7 @@ import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../services/supabase";
+import Notification from "../components/Notification";
 
 export default function EventsScreen({ navigation }) {
   const [events, setEvents] = useState([]);
@@ -159,6 +160,7 @@ export default function EventsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      
       <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" />
 
       {/* Header Estandarizado */}
