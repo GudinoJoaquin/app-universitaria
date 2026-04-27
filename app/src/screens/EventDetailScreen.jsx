@@ -273,7 +273,7 @@ export default function EventDetailsScreen({ route, navigation }) {
             </Text>
           </TouchableOpacity>
 
-          {(user?.role === "admin" || user?.id === event.created_by) && (
+          {(user?.role === "Admin" || user?.id === event.created_by) && (
             <View style={styles.adminActions}>
               <TouchableOpacity
                 style={styles.secondaryButton}

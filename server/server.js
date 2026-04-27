@@ -3,6 +3,9 @@ import cors from "cors";
 import { createConnection } from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import eventRoutes from "./routes/eventRoutes.js";
+import stateRoutes from "./routes/stateRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import registrationRoutes from "./routes/registrationRoutes.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -25,6 +28,9 @@ app.use(async (req, res, next) => {
 // Rutas principales
 app.use("/api", authRoutes);
 app.use("/api/events", eventRoutes);
+app.use("/api/states", stateRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/registrations", registrationRoutes);
 
 // Ruta por defecto
 app.use((req, res) => res.status(404).json({ error: "Ruta no encontrada" }));

@@ -85,16 +85,37 @@ export default function FirstTimeSetupScreen({ navigation }) {
     try {
       const updatedName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
-      // Usamos upsert por si el usuario borró el perfil manualmente pero no de auth.users
+      // Upsert del perfil (sin state_id — ahora se usa user_states)
       const { error } = await supabase
         .from("profiles")
         .upsert({
           id: user.id,
           email: user.email,
-          role: 'student',
+          role: 'User',
           name: updatedName,
           avatar_url: avatarUrl,
         });
+
+      if (!error) {
+        // Asignar estado por defecto en user_states si no tiene ninguno
+        const { data: existingStates } = await supabase
+          .from('user_states')
+          .select('id')
+          .eq('user_id', user.id);
+
+        if (!existingStates || existingStates.length === 0) {
+          const { data: defaultState } = await supabase
+            .from('states')
+            .select('id')
+            .eq('is_default', true)
+            .maybeSingle();
+
+          if (defaultState) {
+            await supabase.from('user_states').insert({ user_id: user.id, state_id: defaultState.id });
+            console.log('✅ [FirstTimeSetup] Estado default asignado en user_states');
+          }
+        }
+      }
 
       if (error) throw error;
 

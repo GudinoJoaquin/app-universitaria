@@ -1,29 +1,39 @@
-// En AppNavigator.jsx - AGREGAR ESTA IMPORTACIÓN
 import React from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { Platform } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
 import { useAuth } from "../context/AuthContext";
 
-// Importar pantallas de screens
+// Auth screens
 import LoginScreen from "../screens/LoginScreens";
 import RegisterScreen from "../screens/RegisterScreen";
-import EventsScreen from "../screens/EventScreens";
+import FirstTimeSetupScreen from "../screens/FirstTimeSetupScreen";
+
+// Main screens
+import EventDashboardScreen from "../screens/EventScreens"; // Unified Events Hub
+import ProfileScreen from "../screens/ProfileScreen";
+import GestionScreen from "../screens/GestionScreen"; 
+import AdminCategoriesScreen from "../screens/AdminCategoriesScreen";
+import SystemConfigScreen from "../screens/SystemConfigScreen";
+import UserManagementScreen from "../screens/UserManagementScreen";
+import AdminStatesScreen from "../screens/AdminStatesScreen";
+
+// Event detail & create
 import EventDetailsScreen from "../screens/EventDetailScreen";
 import EventCreateScreen from "../screens/EventCreateScreen";
-import ProfileScreen from "../screens/ProfileScreen";
-import MisEventScreen from "../screens/MisEventScreen";
-import FirstTimeSetupScreen from "../screens/FirstTimeSetupScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Tab Navigator para las pantallas principales
-import { Ionicons } from "@expo/vector-icons";
-import { Platform } from "react-native";
-
 function MainTabs() {
+  const { user, isAdmin, isHelper } = useAuth();
+  
+  // Only Admin and Helper can see the "Gestión" tab (User Management)
+  const canManageUsers = isAdmin() || isHelper();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -31,55 +41,48 @@ function MainTabs() {
         tabBarInactiveTintColor: "#9CA3AF",
         tabBarShowLabel: true,
         tabBarStyle: {
-          paddingBottom: Platform.OS === 'ios' ? 25 : 15,
+          paddingBottom: Platform.OS === "ios" ? 25 : 10,
           paddingTop: 8,
-          height: Platform.OS === 'ios' ? 85 : 75,
-          borderTopWidth: 0,
-          elevation: 10,
-          shadowColor: "#000",
-          shadowOpacity: 0.1,
-          shadowOffset: { width: 0, height: -2 },
+          height: Platform.OS === "ios" ? 85 : 65,
           backgroundColor: "#ffffff",
-          marginBottom: Platform.OS === 'android' ? 10 : 0, // Separación extra de la barra de gestos
-          borderRadius: Platform.OS === 'android' ? 20 : 0, // Para que se vea como píldora si tiene margen
-          marginHorizontal: Platform.OS === 'android' ? 15 : 0,
-          position: Platform.OS === 'android' ? 'absolute' : 'relative',
+          borderTopWidth: 1,
+          borderTopColor: "#F1F5F9",
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "600",
-        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
         headerShown: false,
       }}
-      sceneContainerStyle={{ backgroundColor: "#F8FAFC" }}
     >
       <Tab.Screen
         name="EventsTab"
-        component={EventsScreen}
+        component={EventDashboardScreen}
         options={{
           title: "Eventos",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "calendar" : "calendar-outline"} color={color} size={26} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "calendar" : "calendar-outline"} color={color} size={24} />
           ),
         }}
       />
-      <Tab.Screen
-        name="MisEventosTab"
-        component={MisEventScreen}
-        options={{
-          title: "Mis Eventos",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "bookmarks" : "bookmarks-outline"} color={color} size={26} />
-          ),
-        }}
-      />
+
+      {canManageUsers && (
+        <Tab.Screen
+          name="ManagementTab"
+          component={GestionScreen}
+          options={{
+            title: "Gestión",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? "people" : "people-outline"} color={color} size={24} />
+            ),
+          }}
+        />
+      )}
+
       <Tab.Screen
         name="ProfileTab"
         component={ProfileScreen}
         options={{
           title: "Perfil",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "person-circle" : "person-circle-outline"} color={color} size={28} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} color={color} size={24} />
           ),
         }}
       />
@@ -87,10 +90,8 @@ function MainTabs() {
   );
 }
 
-import * as Linking from 'expo-linking';
-
 export default function AppNavigator() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
 
   const linking = {
     prefixes: [Linking.createURL("/")],
@@ -101,7 +102,9 @@ export default function AppNavigator() {
         MainTabs: {
           screens: {
             EventsTab: "events",
-            MisEventosTab: "miseventos",
+            ManagementTab: "management",
+            UserManagement: "users",
+            SystemConfig: "config",
             ProfileTab: "profile",
           },
         },
@@ -109,63 +112,32 @@ export default function AppNavigator() {
     },
   };
 
-  // Eliminamos la pantalla de carga blanca global,
-  // permitiendo que se renderice el Login inmediatamente y luego navegue solo si hay sesión.
-
   return (
     <NavigationContainer linking={linking}>
-      <Stack.Navigator>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
-          // pantalla para los usuarios no registrados
           <>
-            <Stack.Screen
-              name="Login"
-              component={LoginScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
-            <Stack.Screen
-              name="Register"
-              component={RegisterScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
           </>
-        ) : user.user_metadata?.has_completed_setup !== true ? (
-          // pantalla obligatoria para completar perfil la primera vez
-          <Stack.Screen
-            name="FirstTimeSetup"
-            component={FirstTimeSetupScreen}
-            options={{
-              headerShown: false,
-            }}
-          />
         ) : (
-          // pantalla para los usuarios registrados que ya completaron el setup
           <>
-            <Stack.Screen
-              name="MainTabs"
-              component={MainTabs}
-              options={{
-                headerShown: false,
-              }}
+            <Stack.Screen name="MainTabs" component={MainTabs} />
+            
+            {/* Event detail & Create - Stacked above tabs for clean focus */}
+            <Stack.Screen 
+              name="EventDetails" 
+              component={EventDetailsScreen} 
+              options={{ headerShown: true, title: "Detalles del Evento", headerBackTitle: "Atrás" }} 
             />
-            <Stack.Screen
-              name="EventDetails"
-              component={EventDetailsScreen}
-              options={{
-                title: "Detalles del Evento",
-              }}
-            />
-            <Stack.Screen
-              name="CreateEvent"
-              component={EventCreateScreen}
-              options={{
-                title: "Crear Evento",
-              }}
-            />
+            <Stack.Screen name="CreateEvent" component={EventCreateScreen} options={{ headerShown: true, title: "Gestión de Evento" }} />
+            <Stack.Screen name="AdminCategories" component={AdminCategoriesScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="UserManagement" component={UserManagementScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="SystemConfig" component={SystemConfigScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AdminStates" component={AdminStatesScreen} options={{ headerShown: false }} />
+            
+            {/* Legacy Fallback if needed */}
+            <Stack.Screen name="FirstTimeSetup" component={FirstTimeSetupScreen} />
           </>
         )}
       </Stack.Navigator>

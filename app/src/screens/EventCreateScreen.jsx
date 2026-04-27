@@ -17,6 +17,8 @@ import { useAuth } from "../context/AuthContext";
 import { eventsService } from "../services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { categoriesService } from "../services/categoriesService";
+import { supabase } from "../services/supabase";
 
 export default function EventCreateScreen({ route, navigation }) {
   const { event: existingEvent } = route.params || {};
@@ -28,6 +30,8 @@ export default function EventCreateScreen({ route, navigation }) {
     date: "", // timestampz
     location: "",
   });
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
+  const [allAvailableCategories, setAllAvailableCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -37,38 +41,40 @@ export default function EventCreateScreen({ route, navigation }) {
   const [isEditing] = useState(!!existingEvent);
 
   useEffect(() => {
-    if (existingEvent) {
-      // Extraer fecha y hora directamente del string para evitar conversión de zona horaria
-      let formattedDate = existingEvent.date;
+    const init = async () => {
+      // 1. Cargar todas las categorías disponibles
+      const res = await categoriesService.getAll();
+      if (res.success) setAllAvailableCategories(res.data);
 
-      // Normalizar a formato YYYY-MM-DD HH:MM:SS+00
-      // Primero, reemplazar T con espacio
-      formattedDate = formattedDate.replace("T", " ");
+      if (existingEvent) {
+        // 2. Cargar categorías asignadas actualmente
+        const { data: assigned } = await supabase
+          .from("event_categories_junction")
+          .select("category_id")
+          .eq("event_id", existingEvent.id);
+        if (assigned) setSelectedCategoryIds(assigned.map(d => d.category_id));
 
-      // Remover cualquier sufijo de zona horaria (Z, +XX:XX, -XX:XX, etc.)
-      formattedDate = formattedDate.replace(/[Z\+\-]\d{2}:\d{2}$/, "").trim();
-      formattedDate = formattedDate.replace(/Z$/, "").trim();
+        // 3. Procesar fecha
+        let formattedDate = existingEvent.date;
+        formattedDate = formattedDate.replace("T", " ").replace(/[Z\+\-]\d{2}:\d{2}$/, "").replace(/Z$/, "").trim();
+        if (!formattedDate.endsWith("+00")) formattedDate += "+00";
 
-      // Asegurar que tenga el sufijo +00
-      if (!formattedDate.endsWith("+00")) {
-        formattedDate = formattedDate + "+00";
+        const dateOnly = formattedDate.split(" ")[0];
+        const [year, month, day] = dateOnly.split("-");
+
+        setFormData({
+          title: existingEvent.title || "",
+          description: existingEvent.description || "",
+          date: formattedDate,
+          location: existingEvent.location || "",
+        });
+        setCalendarMonth(parseInt(month) - 1);
+        setCalendarYear(parseInt(year));
       }
+    };
 
-      const dateOnly = formattedDate.split(" ")[0]; // YYYY-MM-DD
-      const [year, month, day] = dateOnly.split("-");
+    init();
 
-      setFormData({
-        title: existingEvent.title || "",
-        description: existingEvent.description || "",
-        date: formattedDate,
-        location: existingEvent.location || "",
-      });
-      setCalendarMonth(parseInt(month) - 1);
-      setCalendarYear(parseInt(year));
-    }
-
-    // El Stack header está configurado con backgroundColor #3B82F6 en AppNavigator.
-    // Solo actualizamos el título.
     navigation.setOptions({
       title: isEditing ? "Editar Evento" : "Nuevo Evento",
     });
@@ -220,26 +226,25 @@ export default function EventCreateScreen({ route, navigation }) {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    const payload = {
-      ...formData,
-    };
-
     setLoading(true);
     try {
+      let result;
       if (isEditing) {
-        await eventsService.updateEvent(existingEvent.id, payload);
+        result = await eventsService.updateEvent(existingEvent.id, formData);
         Alert.alert("¡Listo!", "El evento se ha actualizado correctamente.");
       } else {
-        await eventsService.createEvent(payload);
-        Alert.alert(
-          "¡Excelente!",
-          "Tu evento ha sido publicado para toda la comunidad.",
-        );
+        result = await eventsService.createEvent(formData);
+        Alert.alert("¡Excelente!", "Tu evento ha sido publicado.");
       }
+
+      if (result.success && result.event) {
+        // Guardar las categorías en la tabla relacional
+        await categoriesService.assignToEvent(result.event.id, selectedCategoryIds);
+      }
+      
       navigation.goBack();
     } catch (error) {
       Alert.alert("Error", error.message || "No se pudo guardar el evento.");
-      console.log("Error saving event:", error);
     } finally {
       setLoading(false);
     }
@@ -522,6 +527,35 @@ export default function EventCreateScreen({ route, navigation }) {
 
             <View style={styles.divider} />
 
+            {/* Categorías */}
+            <View style={styles.inputGroup}>
+              <View style={styles.labelContainer}>
+                <Ionicons name="grid-outline" size={16} color="#6B7280" style={{ marginRight: 6 }} />
+                <Text style={styles.label}>CATEGORÍAS (Selecciona varias)</Text>
+              </View>
+              <View style={styles.catPicker}>
+                {allAvailableCategories.map(cat => {
+                  const isSelected = selectedCategoryIds.includes(cat.id);
+                  return (
+                    <TouchableOpacity 
+                      key={cat.id} 
+                      style={[styles.catOption, isSelected && styles.catOptionActive]}
+                      onPress={() => {
+                        setSelectedCategoryIds(prev => 
+                          isSelected ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
+                        );
+                      }}
+                    >
+                      <Text style={[styles.catOptionTxt, isSelected && styles.catOptionTxtActive]}>{cat.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {allAvailableCategories.length === 0 && <Text style={styles.helperText}>No hay categorías definidas por el Admin.</Text>}
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
             {/* Descripción */}
             <View style={styles.inputGroup}>
               <View style={styles.labelContainer}>
@@ -716,6 +750,32 @@ const styles = StyleSheet.create({
   datePickerText: {
     color: "#1F2937",
     fontSize: 16,
+  },
+  catPicker: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  catOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  catOptionActive: {
+    backgroundColor: "#3B82F6",
+    borderColor: "#3B82F6",
+  },
+  catOptionTxt: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  catOptionTxtActive: {
+    color: "white",
   },
   calendarContainer: {
     marginTop: 12,

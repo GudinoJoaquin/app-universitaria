@@ -14,7 +14,7 @@ const router = express.Router();
 
 router.get("/", auth, getEvents);
 router.get("/:id", auth, getEventById);
-router.post("/", auth, checkRole(["admin", "teacher"]), createEvent);
+router.post("/", auth, checkRole(["Admin", "Organizer"]), createEvent);
 router.put("/:id", auth, updateEvent);
 router.delete("/:id", auth, deleteEvent);
 

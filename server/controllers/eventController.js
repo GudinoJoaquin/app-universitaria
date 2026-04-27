@@ -86,7 +86,7 @@ export const updateEvent = async (req, res) => {
       return res.status(404).json({ error: "Evento no encontrado" });
 
     const event = events[0];
-    if (req.user.role !== "admin" && req.user.id !== event.created_by)
+    if (req.user.role !== "Admin" && req.user.id !== event.created_by)
       return res
         .status(403)
         .json({ error: "No tienes permisos para editar este evento" });
@@ -130,7 +130,7 @@ export const deleteEvent = async (req, res) => {
       return res.status(404).json({ error: "Evento no encontrado" });
 
     const event = events[0];
-    if (req.user.role !== "admin" && req.user.id !== event.created_by)
+    if (req.user.role !== "Admin" && req.user.id !== event.created_by)
       return res
         .status(403)
         .json({ error: "No tienes permisos para eliminar este evento" });

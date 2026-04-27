@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 export const register = async (req, res) => {
   try {
     const connection = req.db;
-    const { name, email, password, role = "student" } = req.body;
+    const { name, email, password, role = "User" } = req.body;
 
     console.log(" Intentando registro:", { name, email, role });
 
@@ -16,11 +16,11 @@ export const register = async (req, res) => {
       });
     }
 
-    // Validar que solo estudiantes puedan registrarse
-    if (role !== "student") {
+    // Validar que solo usuarios básicos puedan registrarse
+    if (role !== "User") {
       return res.status(400).json({
         success: false,
-        error: "El registro está disponible solo para estudiantes",
+        error: "El registro está disponible solo para usuarios básicos",
       });
     }
 
