@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import styles from "../styles/LoginScreenStyle";
+import Notification from "../components/Notification";
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -96,6 +97,7 @@ export default function LoginScreen({ navigation }) {
       colors={["#0f172a", "#1e3a8a", "#3b82f6"]}
       style={{ flex: 1 }}
     >
+      <Notification body={"Hola, hoy es lunes"} title={"Día de la semana"} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}

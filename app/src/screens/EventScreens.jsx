@@ -9,9 +9,11 @@ import { supabase } from "../services/supabase";
 import { eventsService } from "../services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import Notification from "../components/Notification";
 import {
   registerToEvent, unregisterFromEvent,
   getMyRegistrations,
+  getEventParticipants,
 } from "../services/eventsRegistrationService";
 import { categoriesService } from "../services/categoriesService";
 import { Image } from "expo-image";
@@ -81,6 +83,12 @@ export default function EventDashboardScreen({ navigation }) {
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
 
+  // Participants Modal (nuevo de la rama main)
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [participants, setParticipants] = useState([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+
   const loadData = useCallback(async () => {
     if (!user?.id) return;
     try {
@@ -103,7 +111,7 @@ export default function EventDashboardScreen({ navigation }) {
       
       let managed = [];
       if (isAdmin()) managed = normalized;
-      else if (isHelper()) managed = normalized.filter(e => e.created_by_role !== "Admin");
+      else if (isHelper()) managed = normalized.filter(e => e.profiles?.role !== "Admin");
       else managed = normalized.filter(e => e.created_by === user.id);
       setMyManagedEvents(managed);
 
@@ -148,9 +156,17 @@ export default function EventDashboardScreen({ navigation }) {
     ]);
   };
 
+  const handleViewParticipants = async (event) => {
+    setSelectedEvent(event);
+    setModalVisible(true);
+    setParticipantsLoading(true);
+    const res = await getEventParticipants(event.id);
+    setParticipants(res.success ? res.data : []);
+    setParticipantsLoading(false);
+  };
+
   const renderItem = ({ item }) => {
     const status = getEventStatus(item.date, item.start_time, item.end_time);
-    const registered = registeredIds.has(item.id);
     const isOwner = item.created_by === user.id || isAdmin();
 
     return (
@@ -166,11 +182,18 @@ export default function EventDashboardScreen({ navigation }) {
             <View style={[s.statusTag, { backgroundColor: status.bg }]}>
               <Text style={[s.statusTagTxt, { color: status.color }]}>{status.label}</Text>
             </View>
-            {isOwner && activeTab === 2 && (
-              <TouchableOpacity style={s.deleteBtn} onPress={() => handleDeleteEvent(item.id)}>
-                <Ionicons name="trash" size={18} color="white" />
-              </TouchableOpacity>
-            )}
+            <View style={{flexDirection: 'row', gap: 8}}>
+              {isOwner && activeTab === 2 && (
+                <TouchableOpacity style={[s.circleBtn, {backgroundColor: 'rgba(59, 130, 246, 0.8)'}]} onPress={() => handleViewParticipants(item)}>
+                  <Ionicons name="people" size={16} color="white" />
+                </TouchableOpacity>
+              )}
+              {isOwner && activeTab === 2 && (
+                <TouchableOpacity style={[s.circleBtn, {backgroundColor: 'rgba(239, 68, 68, 0.8)'}]} onPress={() => handleDeleteEvent(item.id)}>
+                  <Ionicons name="trash" size={16} color="white" />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
           <View style={s.cardDateTag}>
             <Text style={s.cardDateDay}>{parseDate(item.date).getUTCDate()}</Text>
@@ -250,6 +273,29 @@ export default function EventDashboardScreen({ navigation }) {
         </TouchableOpacity>
       )}
 
+      {/* Participants Modal */}
+      <Modal visible={modalVisible} transparent animationType="fade">
+        <View style={s.modalOverlayCenter}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
+          <View style={s.modalBox}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle} numberOfLines={1}>Asistentes · {selectedEvent?.title}</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}><Ionicons name="close" size={24} color="#1F2937" /></TouchableOpacity>
+            </View>
+            {participantsLoading ? <ActivityIndicator size="large" color="#3B82F6" style={{ margin: 40 }} /> : (
+              <ScrollView>
+                {participants.length === 0 ? <Text style={s.emptyP}>Aún no hay inscritos.</Text> : participants.map((p) => (
+                  <View key={p.id} style={s.pRow}>
+                    <View style={s.pAvatar}><Text style={s.pAvatarTxt}>{p.name?.[0] || "?"}</Text></View>
+                    <View><Text style={s.pName}>{p.name}</Text><Text style={s.pEmail}>{p.email}</Text></View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Status Modal */}
       <Modal visible={statusModalVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
@@ -317,7 +363,7 @@ const s = StyleSheet.create({
   cardTopOverlay: { ...StyleSheet.absoluteFillObject, padding: 15, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   statusTag: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
   statusTagTxt: { fontSize: 10, fontWeight: "900" },
-  deleteBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: "rgba(239, 68, 68, 0.8)", justifyContent: "center", alignItems: "center" },
+  circleBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   cardDateTag: { position: "absolute", bottom: 15, right: 15, backgroundColor: "white", padding: 8, borderRadius: 15, alignItems: "center", minWidth: 55 },
   cardDateDay: { fontSize: 20, fontWeight: "900", color: "#1E1B4B" },
   cardDateMonth: { fontSize: 10, fontWeight: "800", color: "#64748B" },
@@ -337,12 +383,22 @@ const s = StyleSheet.create({
   emptyTxt: { fontSize: 16, color: "#94A3B8", fontWeight: "700" },
   
   modalOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.6)", justifyContent: "flex-end" },
+  modalOverlayCenter: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.6)", justifyContent: "center", padding: 20 },
   modalSheet: { backgroundColor: "white", borderTopLeftRadius: 35, borderTopRightRadius: 35, padding: 25, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 20 },
+  modalBox: { backgroundColor: "white", borderRadius: 24, padding: 20, maxHeight: height * 0.8 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
   modalHandle: { width: 40, height: 5, backgroundColor: "#E2E8F0", borderRadius: 3, alignSelf: "center", marginBottom: 25 },
-  modalTitle: { fontSize: 20, fontWeight: "900", color: "#1E293B", marginBottom: 20 },
+  modalTitle: { fontSize: 18, fontWeight: "900", color: "#1E293B", flex: 1 },
   modalItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "#F8FAFC" },
   modalItemTxt: { fontSize: 16, fontWeight: "700", color: "#64748B" },
   modalItemTxtActive: { color: "#1E1B4B" },
   applyBtn: { backgroundColor: "#1E1B4B", padding: 18, borderRadius: 20, alignItems: "center", marginTop: 25 },
   applyBtnTxt: { color: "white", fontWeight: "900", fontSize: 16 },
+  
+  pRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+  pAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#EFF6FF", justifyContent: "center", alignItems: "center" },
+  pAvatarTxt: { fontWeight: "900", color: "#3B82F6" },
+  pName: { fontSize: 15, fontWeight: "700", color: "#1F2937" },
+  pEmail: { fontSize: 12, color: "#6B7280" },
+  emptyP: { textAlign: "center", color: "#94A3B8", marginVertical: 20 },
 });

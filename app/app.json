@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "eventos-universidad-app",
-    "slug": "eventos-universidad-app",
+    "slug": "app-universitaria",
     "scheme": "eventosuniversidad",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -28,6 +28,12 @@
     },
     "plugins": [
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c0f856a2-95e9-4979-87d5-1cc05ab369cc"
+      }
+    },
+    "owner": "gudi289347"
   }
 }
