@@ -11,7 +11,7 @@ import { getAllUsers, updateUserRole } from "../services/usersService";
 import { getAllStates, assignStateToUser, removeStateFromUser } from "../services/statesService";
 
 // Helper solo puede cambiar User <-> Organizer, no puede tocar Admin/Helper
-const ALLOWED_ROLE_CHANGES = { User: ["Organizer"], Organizer: ["User"] };
+const ALLOWED_ROLE_CHANGES = { User: ["Organizador"], Organizer: ["User"] };
 const ROLE_CONFIG = {
   Admin:     { color: "#EF4444", bg: "#FEF2F2", label: "Admin" },
   Helper:    { color: "#8B5CF6", bg: "#F5F3FF", label: "Helper" },
