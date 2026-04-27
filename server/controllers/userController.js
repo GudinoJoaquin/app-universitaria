@@ -18,37 +18,57 @@ export const getUsers = async (req, res) => {
   }
 };
 
+// Jerarquía de roles (mayor peso = más poder)
+const ROLE_HIERARCHY = {
+  'Admin': 4,
+  'Helper': 3,
+  'Organizer': 2,
+  'User': 1
+};
+
 export const updateUserRole = async (req, res) => {
   try {
     const connection = req.db;
     const { id } = req.params;
-    const { role } = req.body;
-    const validRoles = ["Admin", "Helper", "Organizer", "User"];
-
-    if (!validRoles.includes(role)) {
+    const { role: newRole } = req.body;
+    
+    if (!ROLE_HIERARCHY[newRole]) {
       return res.status(400).json({ error: "Rol inválido" });
     }
 
+    const callerId = req.user.id;
     const callerRole = req.user.role;
+    const callerPower = ROLE_HIERARCHY[callerRole] || 0;
 
-    // Helper solo puede cambiar User <-> Organizer
-    if (callerRole === "Helper") {
-      const [target] = await connection.execute("SELECT role FROM profiles WHERE id = ?", [id]);
-      if (target.length === 0) return res.status(404).json({ error: "Usuario no encontrado" });
-
-      const targetRole = target[0].role;
-      const allowed = ["User", "Organizer"];
-      if (!allowed.includes(targetRole) || !allowed.includes(role)) {
-        return res.status(403).json({ error: "Helper solo puede cambiar entre User y Organizer" });
-      }
-
-      // Helper no puede modificar su propio rol
-      if (req.user.id === id) {
-        return res.status(403).json({ error: "No puedes cambiar tu propio rol" });
-      }
+    // 1. Nadie puede cambiarse su propio ROL
+    if (callerId === id) {
+      return res.status(403).json({ error: "No puedes modificar tu propio nivel de acceso." });
     }
 
-    await connection.execute("UPDATE profiles SET role = ? WHERE id = ?", [role, id]);
+    // 2. Obtener datos del objetivo
+    const [target] = await connection.execute("SELECT role FROM profiles WHERE id = ?", [id]);
+    if (target.length === 0) return res.status(404).json({ error: "Usuario no encontrado" });
+    const targetCurrentRole = target[0].role;
+    const targetPower = ROLE_HIERARCHY[targetCurrentRole] || 0;
+    const newRolePower = ROLE_HIERARCHY[newRole];
+
+    // 3. REGLA: El que llama debe tener un rango ESTRICTAMENTE MAYOR al del objetivo 
+    // y al del nuevo rol que quiere asignar.
+    // Esto evita que un Admin cree otro Admin, o un Helper cree otro Helper.
+    if (callerPower <= targetPower) {
+      return res.status(403).json({ 
+        error: `Como ${callerRole}, no tienes autoridad para modificar a un ${targetCurrentRole}.` 
+      });
+    }
+
+    if (callerPower <= newRolePower) {
+      return res.status(403).json({ 
+        error: `Como ${callerRole}, no tienes permiso para otorgar el rango de ${newRole}.` 
+      });
+    }
+
+    // Si pasó los filtros, actualizar
+    await connection.execute("UPDATE profiles SET role = ? WHERE id = ?", [newRole, id]);
     res.json({ success: true });
   } catch (error) {
     console.error("Error updateUserRole:", error);

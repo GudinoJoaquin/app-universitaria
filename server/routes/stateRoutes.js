@@ -25,9 +25,9 @@ router.put("/:id", auth, roleMiddleware(["Admin", "Helper"]), updateState);
 router.delete("/:id", auth, roleMiddleware(["Admin"]), deleteState);
 router.post("/:id/set-default", auth, roleMiddleware(["Admin"]), setDefaultState);
 
-// Asignar/quitar estado a usuarios — Admin y Helper
-router.post("/assign-user", auth, roleMiddleware(["Admin", "Helper"]), assignStateToUser);
-router.post("/remove-user", auth, roleMiddleware(["Admin", "Helper"]), removeStateFromUser);
-router.get("/:stateId/users", auth, roleMiddleware(["Admin", "Helper"]), getUsersByState);
+// Asignar/quitar estado a usuarios — Admin, Helper y Organizer
+router.post("/assign-user", auth, roleMiddleware(["Admin", "Helper", "Organizer"]), assignStateToUser);
+router.post("/remove-user", auth, roleMiddleware(["Admin", "Helper", "Organizer"]), removeStateFromUser);
+router.get("/:stateId/users", auth, roleMiddleware(["Admin", "Helper", "Organizer"]), getUsersByState);
 
 export default router;

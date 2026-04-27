@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, Alert,
-  RefreshControl, StatusBar, ActivityIndicator, StyleSheet, Pressable, Modal, ScrollView, TextInput,
+  RefreshControl, StatusBar, ActivityIndicator, StyleSheet, Modal, ScrollView, TextInput,
+  Dimensions, Platform, Pressable
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../services/supabase";
-import { Image } from "expo-image";
+import { eventsService } from "../services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   registerToEvent, unregisterFromEvent,
-  getMyRegistrations, getEventParticipants,
+  getMyRegistrations,
 } from "../services/eventsRegistrationService";
-
 import { categoriesService } from "../services/categoriesService";
+import { Image } from "expo-image";
+
+const { height, width } = Dimensions.get("window");
 
 const parseDate = (d) => {
   if (!d) return new Date(0);
@@ -21,228 +24,171 @@ const parseDate = (d) => {
   return new Date(clean.replace(" ", "T") + "Z");
 };
 
-const formatEventDate = (d) => {
-  const dt = parseDate(d);
-  return {
-    date: dt.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }),
-    time: dt.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }),
-    day:  dt.toLocaleDateString("es-ES", { weekday: "long", timeZone: "UTC" }),
-  };
+const formatTimeRange = (start, end) => {
+  if (!start) return "Todo el día";
+  const s = start.includes("T") ? start.split("T")[1].slice(0, 5) : start.slice(0, 5);
+  if (!end) return `${s} hs`;
+  const e = end.includes("T") ? end.split("T")[1].slice(0, 5) : end.slice(0, 5);
+  return `${s} - ${e} hs`;
 };
 
-const getEventStatus = (d) => {
-  const diff = (parseDate(d) - new Date()) / 86400000;
-  if (diff < 0) return { label: "Finalizado",   color: "#6B7280", bg: "#F3F4F6" };
-  if (diff <= 1) return { label: "Hoy/Mañana",  color: "#DC2626", bg: "#FEE2E2" };
-  if (diff <= 7) return { label: "Esta semana", color: "#D97706", bg: "#FEF3C7" };
-  return { label: "Programado",  color: "#059669", bg: "#D1FAE5" };
+const getEventStatus = (eventDateStr, startTimeStr, endTimeStr) => {
+  const now = new Date();
+  const eventDate = parseDate(eventDateStr);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetDate = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+
+  if (targetDate < today) return { id: "past", label: "Finalizado", color: "#94A3B8", bg: "#F1F5F9" };
+  if (targetDate > today) return { id: "scheduled", label: "Programado", color: "#3B82F6", bg: "#EFF6FF" };
+
+  if (targetDate.getTime() === today.getTime()) {
+    if (!startTimeStr) return { id: "ongoing", label: "En Proceso", color: "#10B981", bg: "#ECFDF5" };
+    const getMinutes = (timeStr) => {
+      const part = timeStr.includes("T") ? timeStr.split("T")[1] : timeStr;
+      const [h, m] = part.split(":");
+      return parseInt(h) * 60 + parseInt(m);
+    };
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMinutes = getMinutes(startTimeStr);
+    if (nowMinutes < startMinutes) return { id: "scheduled", label: "Programado", color: "#3B82F6", bg: "#EFF6FF" };
+    if (endTimeStr) {
+      const endMinutes = getMinutes(endTimeStr);
+      if (nowMinutes > endMinutes) return { id: "past", label: "Finalizado", color: "#94A3B8", bg: "#F1F5F9" };
+    }
+    return { id: "ongoing", label: "En Proceso", color: "#10B981", bg: "#ECFDF5" };
+  }
+  return { id: "scheduled", label: "Programado", color: "#3B82F6", bg: "#EFF6FF" };
 };
 
 export default function EventDashboardScreen({ navigation }) {
   const { user, isAdmin, isHelper } = useAuth();
-  
-  // Tabs logic
   const showManageTab = isAdmin() || isHelper() || user?.role === "Organizer";
   const TABS = showManageTab ? ["Explorar", "Inscrito", "Organizar"] : ["Explorar", "Inscrito"];
   const [activeTab, setActiveTab] = useState(0);
 
-  // Filters & Search
   const [allEvents, setAllEvents] = useState([]);
   const [myInscribedEvents, setMyInscribedEvents] = useState([]);
   const [myManagedEvents, setMyManagedEvents] = useState([]);
   const [registeredIds, setRegisteredIds] = useState(new Set());
   const [categories, setCategories] = useState([]);
-  const [activeCategoryId, setActiveCategoryId] = useState(null); 
-  const [searchText, setSearchText] = useState(""); // También faltaba searchText
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
-
-  // Modal participants states
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [participants, setParticipants] = useState([]);
-  const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [sortBy, setSortBy] = useState("newest");
+  const [searchText, setSearchText] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!user?.id) return;
     try {
-      // Cargar categorías primero
       const catRes = await categoriesService.getAll();
       if (catRes.success) setCategories(catRes.data);
 
-      const { data: eventsData } = await supabase
+      const { data: eventsData, error } = await supabase
         .from("events")
-        .select("*, profiles(name, role, id), event_categories_junction(categories(name, color, id))")
-        .order("date", { ascending: true });
+        .select("*, profiles(name, role, id), event_categories_junction(categories(*))")
+        .order("date", { ascending: sortBy === "newest" ? false : true });
 
-      const normalizedEvents = (eventsData ?? []).map(e => ({
+      if (error) throw error;
+
+      const normalized = (eventsData ?? []).map(e => ({
         ...e,
-        created_by_name: e.profiles?.name ?? "Desconocido",
-        created_by_role: e.profiles?.role ?? "User",
         categories: (e.event_categories_junction ?? []).map(j => j.categories).filter(Boolean),
-        profiles: undefined,
-        event_categories_junction: undefined
       }));
 
-      const available = normalizedEvents.filter(e => e.created_by !== user.id);
-      setAllEvents(available);
-
+      setAllEvents(normalized.filter(e => e.created_by !== user.id));
+      
       let managed = [];
-      if (isAdmin()) managed = normalizedEvents;
-      else if (isHelper()) managed = normalizedEvents.filter(e => !["Admin", "Helper"].includes(e.created_by_role));
-      else if (user?.role === "Organizer") managed = normalizedEvents.filter(e => e.created_by === user.id);
+      if (isAdmin()) managed = normalized;
+      else if (isHelper()) managed = normalized.filter(e => e.created_by_role !== "Admin");
+      else managed = normalized.filter(e => e.created_by === user.id);
       setMyManagedEvents(managed);
 
       const myRes = await getMyRegistrations(user.id);
       if (myRes.success) {
-        setMyInscribedEvents(myRes.data.map(e => ({
-          ...e,
-          ...normalizedEvents.find(ne => ne.id === e.id)
-        })));
+        setMyInscribedEvents(myRes.data.map(e => ({ ...e, ...normalized.find(ne => ne.id === e.id) })));
         setRegisteredIds(new Set(myRes.data.map(e => e.id)));
       }
     } catch (e) {
-      console.error("Error loading events hub:", e);
+      console.error(e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, isAdmin, isHelper]);
+  }, [user?.id, isAdmin, isHelper, sortBy]);
 
   useEffect(() => { loadData(); }, [loadData]);
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
-  // --- Filtering Logic ---
   const filteredData = useMemo(() => {
-    let baseData = [];
-    if (activeTab === 0) baseData = allEvents;
-    else if (activeTab === 1) baseData = myInscribedEvents;
-    else baseData = myManagedEvents;
-
-    return baseData.filter(item => {
-      const matchesSearch = item.title?.toLowerCase().includes(searchText.toLowerCase()) || 
-                           item.location?.toLowerCase().includes(searchText.toLowerCase());
-      
-      const matchesCategory = !activeCategoryId || 
-                             item.categories?.some(c => c.id === activeCategoryId);
-      
-      // Si estamos en Explorar (tab 0), ocultar los que ya estoy inscripto
-      const notInscribed = activeTab === 0 ? !registeredIds.has(item.id) : true;
-
-      return matchesSearch && matchesCategory && notInscribed;
+    let base = activeTab === 0 ? allEvents : activeTab === 1 ? myInscribedEvents : myManagedEvents;
+    return base.filter(item => {
+      const matchesSearch = item.title?.toLowerCase().includes(searchText.toLowerCase()) || item.location?.toLowerCase().includes(searchText.toLowerCase());
+      const matchesCategory = selectedCategoryIds.length === 0 || item.categories?.some(c => selectedCategoryIds.includes(c.id));
+      const status = getEventStatus(item.date, item.start_time, item.end_time);
+      const matchesStatus = filterStatus === "all" || (filterStatus === "past" && status.id === "past") || (filterStatus === "ongoing" && status.id === "ongoing") || (filterStatus === "upcoming" && status.id === "scheduled");
+      return matchesSearch && matchesCategory && matchesStatus;
     });
-  }, [activeTab, allEvents, myInscribedEvents, myManagedEvents, searchText, activeCategoryId, registeredIds]);
+  }, [activeTab, allEvents, myInscribedEvents, myManagedEvents, searchText, selectedCategoryIds, filterStatus]);
 
-  // --- Handlers ---
-  const handleRegister = async (event) => {
-    const alreadyReg = registeredIds.has(event.id);
-    setActionLoading(p => ({ ...p, [event.id]: true }));
-    if (alreadyReg) {
-      Alert.alert("Cancelar", "¿Cancelar inscripción?", [
-        { text: "No", style: "cancel" },
-        { text: "Sí", style: "destructive", onPress: async () => {
-            const res = await unregisterFromEvent(user.id, event.id);
-            if (res.success) {
-              setRegisteredIds(p => { const n = new Set(p); n.delete(event.id); return n; });
-              setMyInscribedEvents(p => p.filter(e => e.id !== event.id));
-            } else Alert.alert("Error", res.error);
-            setActionLoading(p => ({ ...p, [event.id]: false }));
-          }
-        },
-      ]);
-    } else {
-      const res = await registerToEvent(user.id, event.id);
-      if (res.success) {
-        setRegisteredIds(p => new Set([...p, event.id]));
-        setMyInscribedEvents(p => [{ ...event, registered_at: new Date().toISOString() }, ...p]);
-      } else Alert.alert("Error", res.error);
-      setActionLoading(p => ({ ...p, [event.id]: false }));
-    }
-  };
-
-  const handleViewParticipants = async (event) => {
-    setSelectedEvent(event);
-    setModalVisible(true);
-    setParticipantsLoading(true);
-    const res = await getEventParticipants(event.id);
-    setParticipants(res.success ? res.data : []);
-    setParticipantsLoading(false);
-  };
-
-  const handleDelete = (event) => {
-    Alert.alert("Eliminar", "¿Eliminar este evento?", [
+  const handleDeleteEvent = (id) => {
+    Alert.alert("Eliminar Evento", "¿Estás seguro de eliminar este evento permanentemente?", [
       { text: "Cancelar", style: "cancel" },
       { text: "Eliminar", style: "destructive", onPress: async () => {
-          const { error } = await supabase.from("events").delete().eq("id", event.id);
-          if (error) Alert.alert("Error", error.message);
-          else loadData();
+          const res = await eventsService.deleteEvent(id);
+          if (res.success) {
+            loadData();
+            Alert.alert("Listo", "Evento eliminado.");
+          } else Alert.alert("Error", res.error);
         }
-      },
+      }
     ]);
   };
 
-  // --- Renders ---
-  const renderEvent = ({ item }) => {
-    const { date, time } = formatEventDate(item.date);
-    const status = getEventStatus(item.date);
+  const renderItem = ({ item }) => {
+    const status = getEventStatus(item.date, item.start_time, item.end_time);
     const registered = registeredIds.has(item.id);
-    const opLoading = actionLoading[item.id];
-    const isManaged = activeTab === 2;
+    const isOwner = item.created_by === user.id || isAdmin();
 
     return (
-      <TouchableOpacity style={s.card} onPress={() => navigation.navigate("EventDetails", { event: item })} activeOpacity={0.9}>
-        <View style={[s.cardHeader, { backgroundColor: status.bg }]}>
-          <View style={[s.statusDot, { backgroundColor: status.color }]} />
-          <Text style={[s.statusText, { color: status.color }]}>{status.label}</Text>
-          <View style={s.catRow}>
-            {item.categories?.map(cat => (
-              <View key={cat.id} style={[s.catBadge, { backgroundColor: cat.color + "20" }]}>
-                <Text style={[s.catBadgeText, { color: cat.color }]}>{cat.name}</Text>
-              </View>
-            ))}
+      <TouchableOpacity style={s.card} activeOpacity={0.9} onPress={() => navigation.navigate("EventDetails", { event: item })}>
+        <View style={s.cardImgBox}>
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={s.cardImg} contentFit="cover" />
+          ) : (
+            <LinearGradient colors={["#312E81", "#1E1B4B"]} style={s.cardImg} />
+          )}
+          <LinearGradient colors={["transparent", "rgba(0,0,0,0.6)"]} style={StyleSheet.absoluteFill} />
+          <View style={s.cardTopOverlay}>
+            <View style={[s.statusTag, { backgroundColor: status.bg }]}>
+              <Text style={[s.statusTagTxt, { color: status.color }]}>{status.label}</Text>
+            </View>
+            {isOwner && activeTab === 2 && (
+              <TouchableOpacity style={s.deleteBtn} onPress={() => handleDeleteEvent(item.id)}>
+                <Ionicons name="trash" size={18} color="white" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={s.cardDateTag}>
+            <Text style={s.cardDateDay}>{parseDate(item.date).getUTCDate()}</Text>
+            <Text style={s.cardDateMonth}>{parseDate(item.date).toLocaleDateString("es-ES", { month: "short", timeZone: "UTC" }).toUpperCase()}</Text>
           </View>
         </View>
-        
-        <View style={s.cardBody}>
-          <Text style={s.cardTitle}>{item.title}</Text>
-          <View style={s.metaRow}>
-            <Ionicons name="calendar-outline" size={14} color="#6366F1" />
-            <Text style={s.metaText}>{date} · {time}</Text>
-          </View>
-          <View style={s.metaRow}>
-            <Ionicons name="location-outline" size={14} color="#EF4444" />
-            <Text style={s.metaText} numberOfLines={1}>{item.location}</Text>
+        <View style={s.cardInfo}>
+          {item.categories?.[0] && (
+            <View style={[s.catChip, { backgroundColor: item.categories[0].color + '20' }]}>
+              <Text style={[s.catChipTxt, { color: item.categories[0].color }]}>{item.categories[0].name.toUpperCase()}</Text>
+            </View>
+          )}
+          <Text style={s.cardTitle} numberOfLines={2}>{item.title}</Text>
+          <View style={s.cardMeta}>
+            <View style={s.metaItem}><Ionicons name="location" size={14} color="#64748B" /><Text style={s.metaTxt} numberOfLines={1}>{item.location}</Text></View>
+            <View style={s.metaItem}><Ionicons name="time" size={14} color="#64748B" /><Text style={s.metaTxt}>{formatTimeRange(item.start_time, item.end_time)}</Text></View>
           </View>
         </View>
-
-        {isManaged ? (
-          <View style={s.manageActions}>
-            <TouchableOpacity style={[s.mBtn, { backgroundColor: "#EFF6FF" }]} onPress={() => handleViewParticipants(item)}>
-              <Ionicons name="people" size={15} color="#2563EB" />
-              <Text style={[s.mBtnTxt, { color: "#2563EB" }]}>Inscritos</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.mBtn, { backgroundColor: "#FFFBEB" }]} onPress={() => navigation.navigate("CreateEvent", { event: item })}>
-              <Ionicons name="pencil" size={15} color="#D97706" />
-              <Text style={[s.mBtnTxt, { color: "#D97706" }]}>Editar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.mBtn, { backgroundColor: "#FEF2F2" }]} onPress={() => handleDelete(item)}>
-              <Ionicons name="trash" size={15} color="#EF4444" />
-              <Text style={[s.mBtnTxt, { color: "#EF4444" }]}>Borrar</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          status.label !== "Finalizado" && (
-            <TouchableOpacity style={[s.regBtn, registered && s.regBtnOut]} onPress={() => handleRegister(item)} disabled={opLoading}>
-              {opLoading ? <ActivityIndicator size="small" color={registered ? "#EF4444" : "white"} /> : (
-                <>
-                  <Ionicons name={registered ? "close-circle" : "add-circle"} size={18} color={registered ? "#EF4444" : "white"} />
-                  <Text style={[s.regBtnTxt, registered && { color: "#EF4444" }]}>{registered ? "Cancelar" : "Inscribirse"}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )
-        )}
       </TouchableOpacity>
     );
   };
@@ -250,95 +196,93 @@ export default function EventDashboardScreen({ navigation }) {
   return (
     <View style={s.container}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient colors={["#1E3A8A", "#3B82F6"]} style={s.header}>
-        <View style={s.headerContent}>
-          <Text style={s.headerTitle}>EventosHub 📅</Text>
-          <View style={s.searchBar}>
-            <Ionicons name="search" size={16} color="white" style={{ opacity: 0.7 }} />
-            <TextInput 
-              style={s.searchInput} 
-              placeholder="Buscar eventos..." 
-              placeholderTextColor="rgba(255,255,255,0.6)" 
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-          </View>
-        </View>
-
-        {/* Tabs */}
+      <LinearGradient colors={["#0F172A", "#1E293B"]} style={s.header}>
+        <Text style={s.headerLogo}>EventosHub</Text>
         <View style={s.tabBar}>
           {TABS.map((tab, i) => (
-            <Pressable key={tab} style={[s.tabItem, activeTab === i && s.tabItemActive]} onPress={() => setActiveTab(i)}>
-              <Text style={[s.tabText, activeTab === i && s.tabTextActive]}>{tab}</Text>
-            </Pressable>
+            <TouchableOpacity key={`tab-${i}`} style={[s.tabItem, activeTab === i && s.tabItemActive]} onPress={() => setActiveTab(i)}>
+              <Text style={[s.tabTxt, activeTab === i && s.tabTxtActive]}>{tab}</Text>
+              {activeTab === i && <View style={s.tabLine} />}
+            </TouchableOpacity>
           ))}
         </View>
       </LinearGradient>
 
-      {/* Categories Scroller */}
-      <View style={s.catContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
-          <TouchableOpacity 
-            style={[s.catChip, !activeCategoryId && s.catChipActive]} 
-            onPress={() => setActiveCategoryId(null)}
-          >
-            <Text style={[s.catChipTxt, !activeCategoryId && s.catChipTxtActive]}>Todos</Text>
+      <View style={s.controls}>
+        <View style={s.searchRow}>
+          <View style={s.searchBar}>
+            <Ionicons name="search" size={20} color="#94A3B8" />
+            <TextInput style={s.searchInput} placeholder="Buscar por título o lugar..." value={searchText} onChangeText={setSearchText} />
+          </View>
+          <TouchableOpacity style={s.filterBtn} onPress={() => setSortBy(p => p === "newest" ? "oldest" : "newest")}>
+            <Ionicons name={sortBy === "newest" ? "swap-vertical" : "swap-vertical"} size={20} color="#1E1B4B" />
           </TouchableOpacity>
-          {categories.map(cat => (
-            <TouchableOpacity 
-              key={cat.id} 
-              style={[s.catChip, activeCategoryId === cat.id && s.catChipActive]} 
-              onPress={() => setActiveCategoryId(cat.id)}
-            >
-              <Text style={[s.catChipTxt, activeCategoryId === cat.id && s.catChipTxtActive]}>{cat.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        </View>
+        <View style={s.filterRow}>
+          <TouchableOpacity style={s.dropdown} onPress={() => setStatusModalVisible(true)}>
+            <Text style={s.dropdownTxt}>{filterStatus === "all" ? "Estado: Todos" : `Estado: ${filterStatus}`}</Text>
+            <Ionicons name="chevron-down" size={16} color="#64748B" />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.dropdown} onPress={() => setCategoryModalVisible(true)}>
+            <Text style={s.dropdownTxt}>{selectedCategoryIds.length === 0 ? "Categoría: Todas" : "Filtro activo"}</Text>
+            <Ionicons name="chevron-down" size={16} color="#64748B" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
-        <View style={s.centered}><ActivityIndicator size="large" color="#3B82F6" /></View>
+        <View style={s.centered}><ActivityIndicator size="large" color="#1E1B4B" /></View>
       ) : (
-        <View style={{ flex: 1 }}>
-          <FlatList
-            data={filteredData}
-            keyExtractor={item => item.id}
-            renderItem={renderEvent}
-            contentContainerStyle={s.list}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            ListEmptyComponent={
-              <View style={s.empty}>
-                <Ionicons name="search-outline" size={60} color="#D1D5DB" />
-                <Text style={s.emptyTitle}>No se encontraron eventos.</Text>
-              </View>
-            }
-          />
-          {activeTab === 2 && (
-            <TouchableOpacity style={s.fab} onPress={() => navigation.navigate("CreateEvent", { event: null })}>
-              <Ionicons name="add" size={30} color="white" />
-            </TouchableOpacity>
-          )}
-        </View>
+        <FlatList
+          data={filteredData}
+          keyExtractor={item => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={s.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={<View style={s.empty}><Ionicons name="calendar-outline" size={60} color="#E2E8F0" /><Text style={s.emptyTxt}>No hay eventos disponibles</Text></View>}
+        />
       )}
 
-      {/* Modal Inscriptos */}
-      <Modal visible={modalVisible} transparent animationType="fade">
+      {activeTab === 2 && (
+        <TouchableOpacity style={s.fab} onPress={() => navigation.navigate("CreateEvent", { event: null })}>
+          <LinearGradient colors={["#1E1B4B", "#312E81"]} style={s.fabGradient}><Ionicons name="add" size={36} color="white" /></LinearGradient>
+        </TouchableOpacity>
+      )}
+
+      {/* Status Modal */}
+      <Modal visible={statusModalVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
-          <View style={s.modalBox}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle} numberOfLines={1}>Asistentes · {selectedEvent?.title}</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}><Ionicons name="close" size={24} color="#1F2937" /></TouchableOpacity>
-            </View>
-            {participantsLoading ? <ActivityIndicator size="large" color="#3B82F6" style={{ margin: 40 }} /> : (
-              <ScrollView>
-                {participants.length === 0 ? <Text style={s.emptyP}>Aún no hay inscritos.</Text> : participants.map(p => (
-                  <View key={p.id} style={s.pRow}>
-                    <View style={s.pAvatar}><Text style={s.pAvatarTxt}>{p.name?.[0] || "?"}</Text></View>
-                    <View><Text style={s.pName}>{p.name}</Text><Text style={s.pEmail}>{p.email}</Text></View>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setStatusModalVisible(false)} />
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>Filtrar por Estado</Text>
+            {[{id: "all", l: "Todos"}, {id: "upcoming", l: "Programado"}, {id: "ongoing", l: "En Proceso"}, {id: "past", l: "Terminado"}].map(st => (
+              <TouchableOpacity key={st.id} style={s.modalItem} onPress={() => { setFilterStatus(st.id); setStatusModalVisible(false); }}>
+                <Text style={[s.modalItemTxt, filterStatus === st.id && s.modalItemTxtActive]}>{st.l}</Text>
+                {filterStatus === st.id && <Ionicons name="checkmark" size={20} color="#1E1B4B" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Category Modal */}
+      <Modal visible={categoryModalVisible} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setCategoryModalVisible(false)} />
+          <View style={[s.modalSheet, { maxHeight: height * 0.7 }]}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>Filtrar por Categoría</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {categories.map(cat => (
+                <TouchableOpacity key={cat.id} style={s.modalItem} onPress={() => setSelectedCategoryIds(p => p.includes(cat.id) ? p.filter(id => id !== cat.id) : [...p, cat.id])}>
+                  <Text style={[s.modalItemTxt, selectedCategoryIds.includes(cat.id) && s.modalItemTxtActive]}>{cat.name}</Text>
+                  <Ionicons name={selectedCategoryIds.includes(cat.id) ? "checkbox" : "square-outline"} size={22} color={selectedCategoryIds.includes(cat.id) ? "#1E1B4B" : "#CBD5E1"} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={s.applyBtn} onPress={() => setCategoryModalVisible(false)}><Text style={s.applyBtnTxt}>Aplicar Filtros</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -349,50 +293,56 @@ export default function EventDashboardScreen({ navigation }) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { paddingTop: 50, paddingBottom: 0, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-  headerContent: { paddingHorizontal: 20, marginBottom: 10 },
-  headerTitle: { fontSize: 22, fontWeight: "900", color: "white", marginBottom: 12 },
-  searchBar: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, paddingHorizontal: 12, height: 40 },
-  searchInput: { flex: 1, color: "white", fontSize: 14, marginLeft: 8 },
-  tabBar: { flexDirection: "row", marginTop: 4 },
-  tabItem: { flex: 1, paddingVertical: 14, alignItems: "center", borderBottomWidth: 3, borderBottomColor: "transparent" },
-  tabItemActive: { borderBottomColor: "white" },
-  tabText: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.6)" },
-  tabTextActive: { color: "white", fontWeight: "800" },
-  catContainer: { paddingVertical: 14, backgroundColor: "white" },
-  catChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: "#F1F5F9", marginRight: 8, borderWidth: 1, borderColor: "#E2E8F0" },
-  catChipActive: { backgroundColor: "#3B82F6", borderColor: "#3B82F6" },
-  catChipTxt: { fontSize: 12, fontWeight: "700", color: "#64748B" },
-  catChipTxtActive: { color: "white" },
-  list: { padding: 16, paddingBottom: 100 },
-  card: { backgroundColor: "white", borderRadius: 20, marginBottom: 14, overflow: "hidden", elevation: 3, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10 },
-  cardHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 8, gap: 6 },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusText: { fontSize: 11, fontWeight: "700", flex: 1 },
-  catBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginRight: 4 },
-  catBadgeText: { fontSize: 9, fontWeight: "800", textTransform: "uppercase" },
-  catRow: { flexDirection: "row", flexWrap: "wrap", flex: 1, justifyContent: "flex-end" },
-  cardBody: { padding: 14, paddingTop: 4 },
-  cardTitle: { fontSize: 17, fontWeight: "800", color: "#1F2937", marginBottom: 8 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 5 },
-  metaText: { fontSize: 13, color: "#6B7280", flex: 1 },
-  regBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#3B82F6", paddingVertical: 12, margin: 12, marginTop: 0, borderRadius: 14 },
-  regBtnOut: { backgroundColor: "#FEF2F2" },
-  regBtnTxt: { color: "white", fontSize: 14, fontWeight: "700" },
-  manageActions: { flexDirection: "row", gap: 6, paddingHorizontal: 12, paddingBottom: 12 },
-  mBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 9, borderRadius: 10 },
-  mBtnTxt: { fontSize: 11, fontWeight: "700" },
-  fab: { position: "absolute", bottom: 20, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: "#3B82F6", justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#3B82F6", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10 },
-  empty: { alignItems: "center", marginTop: 80 },
-  emptyTitle: { marginTop: 16, color: "#9CA3AF" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 20 },
-  modalBox: { backgroundColor: "white", borderRadius: 24, padding: 20, maxHeight: "80%" },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
-  modalTitle: { fontSize: 16, fontWeight: "800", color: "#1F2937", flex: 1, marginRight: 10 },
-  pRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
-  pAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#EFF6FF", justifyContent: "center", alignItems: "center", marginRight: 12 },
-  pAvatarTxt: { color: "#3B82F6", fontWeight: "bold" },
-  pName: { fontSize: 14, fontWeight: "700" },
-  pEmail: { fontSize: 12, color: "#9CA3AF" },
-  emptyP: { textAlign: "center", margin: 20, color: "#9CA3AF" },
+  header: { paddingTop: 60, paddingBottom: 10, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 10 },
+  headerLogo: { fontSize: 28, fontWeight: "900", color: "white", textAlign: "center", marginBottom: 20 },
+  tabBar: { flexDirection: "row", justifyContent: "center", gap: 30 },
+  tabItem: { paddingVertical: 10, position: "relative" },
+  tabTxt: { fontSize: 14, fontWeight: "700", color: "rgba(255,255,255,0.4)" },
+  tabTxtActive: { color: "white" },
+  tabLine: { position: "absolute", bottom: 0, left: 0, right: 0, height: 3, backgroundColor: "white", borderRadius: 2 },
+  
+  controls: { backgroundColor: "white", padding: 15, elevation: 2 },
+  searchRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  searchBar: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: "#F1F5F9", borderRadius: 15, paddingHorizontal: 15, height: 48 },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 14, fontWeight: "600", color: "#1E293B" },
+  filterBtn: { width: 48, height: 48, backgroundColor: "#EEF2FF", borderRadius: 15, justifyContent: "center", alignItems: "center" },
+  filterRow: { flexDirection: "row", gap: 10 },
+  dropdown: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "white", borderRadius: 12, paddingHorizontal: 12, height: 40, borderWidth: 1, borderColor: "#E2E8F0" },
+  dropdownTxt: { fontSize: 12, fontWeight: "700", color: "#64748B" },
+  
+  listContent: { padding: 20, paddingBottom: 100 },
+  card: { backgroundColor: "white", borderRadius: 28, marginBottom: 25, elevation: 8, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 15, overflow: "hidden" },
+  cardImgBox: { height: 200, position: "relative" },
+  cardImg: { ...StyleSheet.absoluteFillObject },
+  cardTopOverlay: { ...StyleSheet.absoluteFillObject, padding: 15, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  statusTag: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  statusTagTxt: { fontSize: 10, fontWeight: "900" },
+  deleteBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: "rgba(239, 68, 68, 0.8)", justifyContent: "center", alignItems: "center" },
+  cardDateTag: { position: "absolute", bottom: 15, right: 15, backgroundColor: "white", padding: 8, borderRadius: 15, alignItems: "center", minWidth: 55 },
+  cardDateDay: { fontSize: 20, fontWeight: "900", color: "#1E1B4B" },
+  cardDateMonth: { fontSize: 10, fontWeight: "800", color: "#64748B" },
+  
+  cardInfo: { padding: 20 },
+  catChip: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 10 },
+  catChipTxt: { fontSize: 10, fontWeight: "900" },
+  cardTitle: { fontSize: 22, fontWeight: "900", color: "#1E293B", marginBottom: 12, lineHeight: 28 },
+  cardMeta: { flexDirection: "row", gap: 15 },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+  metaTxt: { fontSize: 13, color: "#64748B", fontWeight: "600" },
+  
+  fab: { position: "absolute", bottom: 35, right: 25, width: 65, height: 65, borderRadius: 32, elevation: 12 },
+  fabGradient: { flex: 1, borderRadius: 32, justifyContent: "center", alignItems: "center" },
+  
+  empty: { height: 300, justifyContent: "center", alignItems: "center", gap: 15 },
+  emptyTxt: { fontSize: 16, color: "#94A3B8", fontWeight: "700" },
+  
+  modalOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.6)", justifyContent: "flex-end" },
+  modalSheet: { backgroundColor: "white", borderTopLeftRadius: 35, borderTopRightRadius: 35, padding: 25, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 20 },
+  modalHandle: { width: 40, height: 5, backgroundColor: "#E2E8F0", borderRadius: 3, alignSelf: "center", marginBottom: 25 },
+  modalTitle: { fontSize: 20, fontWeight: "900", color: "#1E293B", marginBottom: 20 },
+  modalItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "#F8FAFC" },
+  modalItemTxt: { fontSize: 16, fontWeight: "700", color: "#64748B" },
+  modalItemTxtActive: { color: "#1E1B4B" },
+  applyBtn: { backgroundColor: "#1E1B4B", padding: 18, borderRadius: 20, alignItems: "center", marginTop: 25 },
+  applyBtnTxt: { color: "white", fontWeight: "900", fontSize: 16 },
 });

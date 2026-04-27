@@ -1,17 +1,8 @@
 import React, { useState, useEffect } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ScrollView,
-  ActivityIndicator,
-  StatusBar,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Modal,
+  View, Text, TextInput, TouchableOpacity, Alert, ScrollView,
+  ActivityIndicator, StatusBar, KeyboardAvoidingView, Platform,
+  StyleSheet, Dimensions, Switch
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { eventsService } from "../services/eventsService";
@@ -19,6 +10,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { categoriesService } from "../services/categoriesService";
 import { supabase } from "../services/supabase";
+import * as ImagePicker from "expo-image-picker";
+import { Image } from "expo-image";
+import DateTimePicker from '@react-native-community/datetimepicker';
+
+const { width, height } = Dimensions.get("window");
 
 export default function EventCreateScreen({ route, navigation }) {
   const { event: existingEvent } = route.params || {};
@@ -27,890 +23,297 @@ export default function EventCreateScreen({ route, navigation }) {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    date: "", // timestampz
+    date: "", 
     location: "",
+    image_url: "",
+    start_time_raw: new Date(),
+    end_time_raw: new Date(),
   });
+
+  const [useTime, setUseTime] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
   const [allAvailableCategories, setAllAvailableCategories] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
-  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+  const [imageLoading, setImageLoading] = useState(false);
+  
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
   const [isEditing] = useState(!!existingEvent);
 
   useEffect(() => {
     const init = async () => {
-      // 1. Cargar todas las categorías disponibles
       const res = await categoriesService.getAll();
       if (res.success) setAllAvailableCategories(res.data);
-
       if (existingEvent) {
-        // 2. Cargar categorías asignadas actualmente
-        const { data: assigned } = await supabase
-          .from("event_categories_junction")
-          .select("category_id")
-          .eq("event_id", existingEvent.id);
+        const { data: assigned } = await supabase.from("event_categories_junction").select("category_id").eq("event_id", existingEvent.id);
         if (assigned) setSelectedCategoryIds(assigned.map(d => d.category_id));
-
-        // 3. Procesar fecha
-        let formattedDate = existingEvent.date;
-        formattedDate = formattedDate.replace("T", " ").replace(/[Z\+\-]\d{2}:\d{2}$/, "").replace(/Z$/, "").trim();
-        if (!formattedDate.endsWith("+00")) formattedDate += "+00";
-
-        const dateOnly = formattedDate.split(" ")[0];
-        const [year, month, day] = dateOnly.split("-");
+        
+        const start = existingEvent.start_time ? new Date(existingEvent.start_time) : new Date();
+        const end = existingEvent.end_time ? new Date(existingEvent.end_time) : new Date();
 
         setFormData({
           title: existingEvent.title || "",
           description: existingEvent.description || "",
-          date: formattedDate,
+          date: existingEvent.date || "",
           location: existingEvent.location || "",
+          image_url: existingEvent.image_url || "",
+          start_time_raw: start,
+          end_time_raw: end,
         });
-        setCalendarMonth(parseInt(month) - 1);
-        setCalendarYear(parseInt(year));
+        if (existingEvent.start_time) setUseTime(true);
       }
     };
-
     init();
+  }, [existingEvent]);
 
-    navigation.setOptions({
-      title: isEditing ? "Editar Evento" : "Nuevo Evento",
+  const handlePickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaType ? ImagePicker.MediaType.Images : ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.7,
     });
-  }, [existingEvent, isEditing, navigation]);
-
-  const handleInputChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  const formatDate = (date) => {
-    const year = date.getFullYear();
-    const month = `${date.getMonth() + 1}`.padStart(2, "0");
-    const day = `${date.getDate()}`.padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  const formatDateDisplay = (value) => {
-    if (!value) return "Selecciona una fecha";
-    const dateStr = value.split(" ")[0]; // Obtener YYYY-MM-DD
-    const [year, month, day] = dateStr.split("-");
-    const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString("es-ES", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const generateCalendar = (month, year) => {
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const weeks = [];
-    let week = Array(firstDay).fill(null);
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      week.push(day);
-      if (week.length === 7) {
-        weeks.push(week);
-        week = [];
-      }
-    }
-
-    if (week.length > 0) {
-      while (week.length < 7) {
-        week.push(null);
-      }
-      weeks.push(week);
-    }
-
-    return weeks;
-  };
-
-  const handleDaySelect = (day) => {
-    const selectedDate = new Date(calendarYear, calendarMonth, day);
-    const dateStr = formatDate(selectedDate);
-    // Extraer hora manteniendo el formato YYYY-MM-DD HH:MM:SS+00
-    let timeStr = "00:00:00";
-    if (formData.date) {
-      const timePart = formData.date.split(" ")[1];
-      if (timePart) {
-        timeStr = timePart.replace("+00", "").trim();
-      }
-    }
-    const timestamp = `${dateStr} ${timeStr}+00`;
-    setFormData((prev) => ({
-      ...prev,
-      date: timestamp,
-    }));
-    setShowCalendar(false);
-  };
-
-  const handleTimeSelect = (time) => {
-    // time viene como "HH:MM" de getTimeOptions()
-    let dateStr = "";
-    if (formData.date) {
-      dateStr = formData.date.split(" ")[0]; // Obtener YYYY-MM-DD
-    }
-    // Construir timestamp con la hora seleccionada
-    const timestamp = `${dateStr} ${time}:00+00`;
-    setFormData((prev) => ({
-      ...prev,
-      date: timestamp,
-    }));
-    setShowTimePicker(false);
-  };
-
-  const handleMonthChange = (direction) => {
-    const nextMonth = calendarMonth + direction;
-    if (nextMonth < 0) {
-      setCalendarMonth(11);
-      setCalendarYear((prev) => prev - 1);
-    } else if (nextMonth > 11) {
-      setCalendarMonth(0);
-      setCalendarYear((prev) => prev + 1);
-    } else {
-      setCalendarMonth(nextMonth);
+    if (!result.canceled) {
+      setImageLoading(true);
+      const res = await eventsService.uploadImage(result.assets[0].uri);
+      if (res.success) setFormData(p => ({ ...p, image_url: res.url }));
+      else Alert.alert("Error", res.error);
+      setImageLoading(false);
     }
   };
 
-  const getTimeOptions = () => {
-    const options = [];
-    for (let hour = 0; hour < 24; hour++) {
-      for (let step = 0; step < 60; step += 15) {
-        options.push(
-          `${String(hour).padStart(2, "0")}:${String(step).padStart(2, "0")}`,
-        );
-      }
+  const onDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const isoDate = selectedDate.toISOString().split("T")[0];
+      setFormData(p => ({ ...p, date: isoDate }));
     }
-    return options;
   };
 
-  const validateForm = () => {
-    if (!formData.title.trim()) {
-      Alert.alert("Requerido", "Por favor ingresa un título para el evento.");
-      return false;
+  const onStartTimeChange = (event, selectedTime) => {
+    setShowStartTimePicker(Platform.OS === 'ios');
+    if (selectedTime) {
+      setFormData(p => ({ ...p, start_time_raw: selectedTime }));
     }
-    if (!formData.date) {
-      Alert.alert(
-        "Requerido",
-        "Por favor selecciona una fecha para el evento.",
-      );
-      return false;
-    }
-    if (!formData.location.trim()) {
-      Alert.alert(
-        "Requerido",
-        "Por favor ingresa una ubicación para el evento.",
-      );
-      return false;
-    }
+  };
 
-    // Convertir YYYY-MM-DD HH:MM:SS+00 a ISO format para parsearlo correctamente
-    const isoDate = formData.date.replace(" ", "T").replace("+00", "Z");
-    const selectedDateTime = new Date(isoDate);
-    if (selectedDateTime < new Date()) {
-      Alert.alert(
-        "Fecha Inválida",
-        "No puedes crear eventos en fechas pasadas.",
-      );
-      return false;
+  const onEndTimeChange = (event, selectedTime) => {
+    setShowEndTimePicker(Platform.OS === 'ios');
+    if (selectedTime) {
+      setFormData(p => ({ ...p, end_time_raw: selectedTime }));
     }
-
-    return true;
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
-
+    if (formData.title.length < 4 || !formData.date || formData.location.length < 4) {
+      return Alert.alert("Campos incompletos", "Verifica el título, fecha y ubicación.");
+    }
     setLoading(true);
     try {
-      let result;
-      if (isEditing) {
-        result = await eventsService.updateEvent(existingEvent.id, formData);
-        Alert.alert("¡Listo!", "El evento se ha actualizado correctamente.");
+      const payload = { 
+        title: formData.title,
+        description: formData.description,
+        date: formData.date,
+        location: formData.location,
+        image_url: formData.image_url,
+        created_by: user.id 
+      };
+
+      if (useTime) {
+        // Combinar fecha con hora seleccionada
+        const start = new Date(formData.date + "T" + formData.start_time_raw.toLocaleTimeString('en-US', { hour12: false }));
+        payload.start_time = start.toISOString();
+        
+        const end = new Date(formData.date + "T" + formData.end_time_raw.toLocaleTimeString('en-US', { hour12: false }));
+        payload.end_time = end.toISOString();
       } else {
-        result = await eventsService.createEvent(formData);
-        Alert.alert("¡Excelente!", "Tu evento ha sido publicado.");
+        payload.start_time = null;
+        payload.end_time = null;
       }
 
-      if (result.success && result.event) {
-        // Guardar las categorías en la tabla relacional
+      let result = isEditing ? await eventsService.updateEvent(existingEvent.id, payload) : await eventsService.createEvent(payload);
+      if (result.success) {
         await categoriesService.assignToEvent(result.event.id, selectedCategoryIds);
-      }
-      
-      navigation.goBack();
-    } catch (error) {
-      Alert.alert("Error", error.message || "No se pudo guardar el evento.");
-    } finally {
-      setLoading(false);
-    }
+        Alert.alert("✅ Éxito", isEditing ? "Evento actualizado" : "¡Evento publicado!");
+        navigation.goBack();
+      } else throw new Error(result.error);
+    } catch (e) { Alert.alert("Error", e.message); }
+    finally { setLoading(false); }
+  };
+
+  const formatDisplayDate = (d) => {
+    if (!d) return "Seleccionar día";
+    const parts = d.split("-");
+    return new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString("es-ES", { day: "numeric", month: "long" });
+  };
+
+  const formatDisplayTime = (d) => {
+    return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-    >
-      <StatusBar barStyle="light-content" backgroundColor="#3B82F6" />
+    <View style={s.container}>
+      <StatusBar barStyle="light-content" />
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+          <LinearGradient colors={["#0F172A", "#1E293B"]} style={s.header}>
+            <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}><Ionicons name="arrow-back" size={24} color="white" /></TouchableOpacity>
+            <Text style={s.headerTitle}>{isEditing ? "Editar" : "Crear"} Evento</Text>
+          </LinearGradient>
 
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Header Hero Blend */}
-        <LinearGradient
-          colors={["#3B82F6", "#1E3A8A"]}
-          style={styles.heroSection}
-        >
-          <View style={styles.iconCircle}>
-            <Ionicons
-              name={isEditing ? "create" : "calendar-outline"}
-              size={32}
-              color="white"
-            />
-          </View>
-          <Text style={styles.title}>
-            {isEditing ? "Editar Evento" : "Crear Evento"}
-          </Text>
-          <Text style={styles.subtitle}>
-            {isEditing
-              ? "Actualiza la información de tu evento publicado."
-              : "Programa una nueva actividad y compártela con la comunidad."}
-          </Text>
-        </LinearGradient>
-
-        {/* Formulario Principal (Floating Card) */}
-        <View style={styles.formContainer}>
-          <View style={styles.formCard}>
-            {/* Título del Evento */}
-            <View style={styles.inputGroup}>
-              <View style={styles.labelContainer}>
-                <Ionicons
-                  name="text-outline"
-                  size={16}
-                  color="#6B7280"
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={styles.label}>
-                  TÍTULO DEL EVENTO <Text style={styles.required}>*</Text>
-                </Text>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: Feria de Ciencias 2024..."
-                placeholderTextColor="#9CA3AF"
-                value={formData.title}
-                onChangeText={(text) => handleInputChange("title", text)}
-                maxLength={100}
-              />
-              <Text style={styles.charCount}>{formData.title.length}/100</Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            {/* Fecha y Hora */}
-            <View style={styles.inputGroup}>
-              <View style={styles.labelContainer}>
-                <Ionicons
-                  name="time-outline"
-                  size={16}
-                  color="#6B7280"
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={styles.label}>
-                  FECHA Y HORA <Text style={styles.required}>*</Text>
-                </Text>
-              </View>
-
-              <View style={styles.rowGroup}>
-                <View style={[styles.column, styles.dateColumn]}>
-                  <Text style={styles.subLabel}>Fecha</Text>
-                  <TouchableOpacity
-                    style={styles.datePickerInput}
-                    onPress={() => setShowCalendar((prev) => !prev)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.datePickerText}>
-                      {formatDateDisplay(formData.date)}
-                    </Text>
-                    <Ionicons
-                      name="calendar-outline"
-                      size={20}
-                      color="#3B82F6"
-                    />
-                  </TouchableOpacity>
-
-                  {showCalendar && (
-                    <View style={styles.calendarContainer}>
-                      <View style={styles.calendarHeader}>
-                        <TouchableOpacity onPress={() => handleMonthChange(-1)}>
-                          <Ionicons
-                            name="chevron-back"
-                            size={18}
-                            color="#475569"
-                          />
-                        </TouchableOpacity>
-                        <Text style={styles.calendarTitle}>
-                          {new Date(
-                            calendarYear,
-                            calendarMonth,
-                          ).toLocaleDateString("es-ES", {
-                            month: "long",
-                            year: "numeric",
-                          })}
-                        </Text>
-                        <TouchableOpacity onPress={() => handleMonthChange(1)}>
-                          <Ionicons
-                            name="chevron-forward"
-                            size={18}
-                            color="#475569"
-                          />
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={styles.calendarWeekNames}>
-                        {["D", "L", "M", "M", "J", "V", "S"].map((day) => (
-                          <Text key={day} style={styles.calendarWeekName}>
-                            {day}
-                          </Text>
-                        ))}
-                      </View>
-
-                      {generateCalendar(calendarMonth, calendarYear).map(
-                        (week, weekIndex) => (
-                          <View key={weekIndex} style={styles.calendarWeekRow}>
-                            {week.map((day, dayIndex) => {
-                              const dateStr = formData.date
-                                ? formData.date.split(" ")[0]
-                                : null;
-                              const isSelected =
-                                dateStr &&
-                                day &&
-                                `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}` ===
-                                  dateStr;
-
-                              return (
-                                <TouchableOpacity
-                                  key={dayIndex}
-                                  style={[
-                                    styles.calendarDay,
-                                    isSelected && styles.calendarDaySelected,
-                                  ]}
-                                  disabled={!day}
-                                  onPress={() => day && handleDaySelect(day)}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.calendarDayText,
-                                      !day && styles.calendarDayTextDisabled,
-                                      isSelected &&
-                                        styles.calendarDayTextSelected,
-                                    ]}
-                                  >
-                                    {day || ""}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        ),
-                      )}
-                    </View>
+          <View style={s.form}>
+            <TouchableOpacity style={s.imgBox} onPress={handlePickImage} disabled={imageLoading}>
+              {formData.image_url ? <Image source={{ uri: formData.image_url }} style={s.preview} /> : (
+                <View style={s.imgPlaceholder}>
+                  {imageLoading ? <ActivityIndicator color="#1E1B4B" /> : (
+                    <>
+                      <View style={s.imgIconBox}><Ionicons name="camera" size={30} color="#3B82F6" /></View>
+                      <Text style={s.imgLabel}>Añadir imagen de portada</Text>
+                    </>
                   )}
                 </View>
+              )}
+            </TouchableOpacity>
 
-                <View style={[styles.column, styles.timeColumn]}>
-                  <Text style={styles.subLabel}>Hora</Text>
-                  <TouchableOpacity
-                    style={styles.datePickerInput}
-                    onPress={() => setShowTimePicker(true)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.datePickerText}>
-                      {formData.date
-                        ? formData.date.split(" ")[1]?.slice(0, 5)
-                        : "Selecciona una hora"}
-                    </Text>
-                    <Ionicons name="time-outline" size={20} color="#3B82F6" />
-                  </TouchableOpacity>
-
-                  <Modal
-                    visible={showTimePicker}
-                    animationType="slide"
-                    transparent
-                    onRequestClose={() => setShowTimePicker(false)}
-                  >
-                    <View style={styles.modalOverlay}>
-                      <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                          <Text style={styles.modalTitle}>Selecciona hora</Text>
-                          <TouchableOpacity
-                            onPress={() => setShowTimePicker(false)}
-                          >
-                            <Ionicons name="close" size={24} color="#475569" />
-                          </TouchableOpacity>
-                        </View>
-                        <ScrollView
-                          style={styles.timeModalScroll}
-                          contentContainerStyle={styles.timeModalContent}
-                          showsVerticalScrollIndicator={false}
-                        >
-                          {getTimeOptions().map((time) => {
-                            const currentTime = formData.date
-                              ? formData.date.split(" ")[1]?.slice(0, 5)
-                              : "";
-                            return (
-                              <TouchableOpacity
-                                key={time}
-                                style={[
-                                  styles.timeOption,
-                                  currentTime === time &&
-                                    styles.timeOptionActive,
-                                ]}
-                                onPress={() => handleTimeSelect(time)}
-                                activeOpacity={0.8}
-                              >
-                                <Text
-                                  style={[
-                                    styles.timeOptionText,
-                                    currentTime === time &&
-                                      styles.timeOptionTextActive,
-                                  ]}
-                                >
-                                  {time}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </ScrollView>
-                      </View>
-                    </View>
-                  </Modal>
-
-                  <Text style={styles.helperText}>
-                    Toca para abrir el selector de hora.
-                  </Text>
+            <View style={s.group}>
+              <Text style={s.label}>INFORMACIÓN GENERAL</Text>
+              <TextInput style={s.input} placeholder="Título del evento" value={formData.title} onChangeText={t => setFormData(p => ({ ...p, title: t }))} />
+              
+              <TouchableOpacity style={s.inputRow} onPress={() => setShowDatePicker(true)}>
+                <View style={s.inputRowLeft}>
+                  <Ionicons name="calendar" size={20} color="#3B82F6" />
+                  <Text style={[s.inputTxt, !formData.date && s.muted]}>{formatDisplayDate(formData.date)}</Text>
                 </View>
+                <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+              </TouchableOpacity>
+
+              <TextInput style={s.input} placeholder="¿Dónde será el evento?" value={formData.location} onChangeText={t => setFormData(p => ({ ...p, location: t }))} />
+            </View>
+
+            <View style={s.group}>
+              <View style={s.toggleRow}>
+                <View>
+                  <Text style={s.label}>HORARIO DEL EVENTO</Text>
+                  <Text style={s.subLabel}>¿Tiene una hora específica?</Text>
+                </View>
+                <Switch value={useTime} onValueChange={setUseTime} trackColor={{ false: "#E2E8F0", true: "#1E1B4B" }} />
+              </View>
+
+              {useTime && (
+                <View style={s.row}>
+                  <TouchableOpacity style={[s.inputRow, { flex: 1 }]} onPress={() => setShowStartTimePicker(true)}>
+                    <View style={s.inputRowLeft}>
+                      <Ionicons name="time" size={20} color="#10B981" />
+                      <Text style={s.inputTxt}>{formatDisplayTime(formData.start_time_raw)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.inputRow, { flex: 1 }]} onPress={() => setShowEndTimePicker(true)}>
+                    <View style={s.inputRowLeft}>
+                      <Ionicons name="time" size={20} color="#EF4444" />
+                      <Text style={s.inputTxt}>{formatDisplayTime(formData.end_time_raw)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            <View style={s.group}>
+              <Text style={s.label}>CATEGORÍAS</Text>
+              <View style={s.catGrid}>
+                {allAvailableCategories.map(c => (
+                  <TouchableOpacity 
+                    key={c.id} 
+                    style={[s.catChip, selectedCategoryIds.includes(c.id) && { backgroundColor: c.color, borderColor: c.color }]}
+                    onPress={() => setSelectedCategoryIds(p => p.includes(c.id) ? p.filter(id => id !== c.id) : [...p, c.id])}
+                  >
+                    <Text style={[s.catChipTxt, selectedCategoryIds.includes(c.id) && { color: "white" }]}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
 
-            <View style={styles.divider} />
-
-            {/* Ubicación */}
-            <View style={styles.inputGroup}>
-              <View style={styles.labelContainer}>
-                <Ionicons
-                  name="location-outline"
-                  size={16}
-                  color="#6B7280"
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={styles.label}>
-                  UBICACIÓN <Text style={styles.required}>*</Text>
-                </Text>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: Auditorio principal..."
-                placeholderTextColor="#9CA3AF"
-                value={formData.location}
-                onChangeText={(text) => handleInputChange("location", text)}
-                maxLength={100}
-              />
+            <View style={s.group}>
+              <Text style={s.label}>DESCRIPCIÓN</Text>
+              <TextInput style={[s.input, { height: 120, textAlignVertical: "top" }]} placeholder="Describe los detalles del evento..." multiline value={formData.description} onChangeText={t => setFormData(p => ({ ...p, description: t }))} />
             </View>
 
-            <View style={styles.divider} />
-
-            {/* Categorías */}
-            <View style={styles.inputGroup}>
-              <View style={styles.labelContainer}>
-                <Ionicons name="grid-outline" size={16} color="#6B7280" style={{ marginRight: 6 }} />
-                <Text style={styles.label}>CATEGORÍAS (Selecciona varias)</Text>
-              </View>
-              <View style={styles.catPicker}>
-                {allAvailableCategories.map(cat => {
-                  const isSelected = selectedCategoryIds.includes(cat.id);
-                  return (
-                    <TouchableOpacity 
-                      key={cat.id} 
-                      style={[styles.catOption, isSelected && styles.catOptionActive]}
-                      onPress={() => {
-                        setSelectedCategoryIds(prev => 
-                          isSelected ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
-                        );
-                      }}
-                    >
-                      <Text style={[styles.catOptionTxt, isSelected && styles.catOptionTxtActive]}>{cat.name}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                {allAvailableCategories.length === 0 && <Text style={styles.helperText}>No hay categorías definidas por el Admin.</Text>}
-              </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            {/* Descripción */}
-            <View style={styles.inputGroup}>
-              <View style={styles.labelContainer}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={16}
-                  color="#6B7280"
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={styles.label}>DESCRIPCIÓN</Text>
-              </View>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Escribe los detalles, actividades y requisitos..."
-                placeholderTextColor="#9CA3AF"
-                value={formData.description}
-                onChangeText={(text) => handleInputChange("description", text)}
-                multiline
-                numberOfLines={5}
-                textAlignVertical="top"
-                maxLength={500}
-              />
-              <Text style={styles.charCount}>
-                {formData.description.length}/500
-              </Text>
-            </View>
+            <TouchableOpacity style={[s.submit, (formData.title.length < 4 || !formData.date) && s.disabled]} onPress={handleSubmit} disabled={loading}>
+              <LinearGradient colors={["#1E1B4B", "#312E81"]} style={s.submitGradient}>
+                {loading ? <ActivityIndicator color="white" /> : <Text style={s.submitTxt}>{isEditing ? "GUARDAR CAMBIOS" : "PUBLICAR EVENTO"}</Text>}
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
-        </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-        {/* Botones de Acción */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[
-              styles.submitButton,
-              (!formData.title ||
-                !formData.date ||
-                !formData.location ||
-                loading) &&
-                styles.submitButtonDisabled,
-            ]}
-            onPress={handleSubmit}
-            disabled={
-              !formData.title || !formData.date || !formData.location || loading
-            }
-          >
-            {loading ? (
-              <ActivityIndicator color="white" size="small" />
-            ) : (
-              <>
-                <Ionicons
-                  name={isEditing ? "save" : "paper-plane"}
-                  size={20}
-                  color="white"
-                  style={{ marginRight: 8 }}
-                />
-                <Text style={styles.submitButtonText}>
-                  {isEditing ? "Guardar Cambios" : "Publicar Evento"}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+      {/* Native Pickers */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={formData.date ? new Date(formData.date + "T12:00:00") : new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'inline' : 'default'}
+          minimumDate={new Date()}
+          onChange={onDateChange}
+        />
+      )}
 
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={() => navigation.goBack()}
-            disabled={loading}
-          >
-            <Text style={styles.cancelButtonText}>Cancelar</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      {showStartTimePicker && (
+        <DateTimePicker
+          value={formData.start_time_raw}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          is24Hour={true}
+          onChange={onStartTimeChange}
+        />
+      )}
+
+      {showEndTimePicker && (
+        <DateTimePicker
+          value={formData.end_time_raw}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          is24Hour={true}
+          onChange={onEndTimeChange}
+        />
+      )}
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingBottom: 40 },
-  heroSection: {
-    paddingHorizontal: 24,
-    paddingTop: 30,
-    paddingBottom: 60,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    alignItems: "center",
-  },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.4)",
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "900",
-    color: "white",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.8)",
-    textAlign: "center",
-    paddingHorizontal: 20,
-  },
-  formContainer: {
-    paddingHorizontal: 20,
-    marginTop: -30, // Tarjeta flotante
-  },
-  formCard: {
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  inputGroup: { marginVertical: 8 },
-  labelContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  label: { fontSize: 12, color: "#4B5563", fontWeight: "bold" },
-  required: { color: "#EF4444" },
-  input: {
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: "#1F2937",
-  },
-  textArea: {
-    minHeight: 120,
-    paddingTop: 16,
-  },
-  charCount: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    textAlign: "right",
-    marginTop: 4,
-    fontWeight: "500",
-  },
-  helperText: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    marginTop: 4,
-    fontWeight: "500",
-  },
-  rowGroup: {
-    flexDirection: "column",
-    alignItems: "stretch",
-  },
-  column: {
-    flex: 1,
-  },
-  dateColumn: {
-    minWidth: 170,
-  },
-  timeColumn: {
-    minWidth: 170,
-    marginTop: 16,
-  },
-  subLabel: {
-    color: "#4B5563",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  datePickerInput: {
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  datePickerText: {
-    color: "#1F2937",
-    fontSize: 16,
-  },
-  catPicker: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 4,
-  },
-  catOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "#F1F5F9",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  catOptionActive: {
-    backgroundColor: "#3B82F6",
-    borderColor: "#3B82F6",
-  },
-  catOptionTxt: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#64748B",
-  },
-  catOptionTxtActive: {
-    color: "white",
-  },
-  calendarContainer: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 20,
-    backgroundColor: "white",
-    padding: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  calendarHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  calendarTitle: {
-    color: "#1F2937",
-    fontWeight: "700",
-    fontSize: 14,
-    textTransform: "capitalize",
-  },
-  calendarWeekNames: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  calendarWeekName: {
-    width: 28,
-    textAlign: "center",
-    color: "#6B7280",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  calendarWeekRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  calendarDay: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  calendarDaySelected: {
-    backgroundColor: "#3B82F6",
-  },
-  calendarDayText: {
-    color: "#1F2937",
-    fontSize: 12,
-  },
-  calendarDayTextSelected: {
-    color: "white",
-    fontWeight: "700",
-  },
-  calendarDayTextDisabled: {
-    color: "transparent",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "white",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: "70%",
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1F2937",
-  },
-  timeModalScroll: {
-    maxHeight: 380,
-  },
-  timeModalContent: {
-    paddingBottom: 12,
-  },
-  timeOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    marginBottom: 10,
-    backgroundColor: "#F9FAFB",
-  },
-  timeOptionActive: {
-    backgroundColor: "#3B82F6",
-  },
-  timeOptionText: {
-    fontSize: 14,
-    color: "#1F2937",
-    textAlign: "center",
-  },
-  timeOptionTextActive: {
-    color: "white",
-    fontWeight: "700",
-  },
-  divider: { height: 1, backgroundColor: "#F3F4F6", marginVertical: 16 },
-  actionsContainer: { paddingHorizontal: 24, marginTop: 32 },
-  submitButton: {
-    backgroundColor: "#3B82F6",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: 20,
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-    marginBottom: 16,
-  },
-  submitButtonDisabled: { backgroundColor: "#93C5FD", shadowOpacity: 0 },
-  submitButtonText: { color: "white", fontSize: 16, fontWeight: "bold" },
-  cancelButton: {
-    backgroundColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-  },
-  cancelButtonText: { color: "#6B7280", fontSize: 15, fontWeight: "bold" },
+  scroll: { paddingBottom: 50 },
+  header: { height: 160, padding: 25, justifyContent: "flex-end", borderBottomLeftRadius: 35, borderBottomRightRadius: 35 },
+  backBtn: { position: "absolute", top: 60, left: 25, width: 45, height: 45, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.15)", justifyContent: "center", alignItems: "center" },
+  headerTitle: { fontSize: 28, fontWeight: "900", color: "white" },
+  
+  form: { padding: 25, marginTop: -25, gap: 20 },
+  imgBox: { height: 180, backgroundColor: "white", borderRadius: 25, overflow: "hidden", elevation: 10, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 15 },
+  imgPlaceholder: { flex: 1, justifyContent: "center", alignItems: "center", gap: 10 },
+  imgIconBox: { width: 60, height: 60, borderRadius: 20, backgroundColor: "#EFF6FF", justifyContent: "center", alignItems: "center" },
+  imgLabel: { fontSize: 14, fontWeight: "700", color: "#64748B" },
+  preview: { ...StyleSheet.absoluteFillObject },
+  
+  group: { gap: 10 },
+  label: { fontSize: 11, fontWeight: "900", color: "#94A3B8", letterSpacing: 1 },
+  subLabel: { fontSize: 12, color: "#64748B", fontWeight: "600" },
+  input: { backgroundColor: "white", borderRadius: 18, padding: 16, fontSize: 15, fontWeight: "600", color: "#1E293B", elevation: 2 },
+  inputRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "white", borderRadius: 18, padding: 16, elevation: 2 },
+  inputRowLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  inputTxt: { fontSize: 15, fontWeight: "600", color: "#1E293B" },
+  muted: { color: "#94A3B8" },
+  
+  toggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 5 },
+  row: { flexDirection: "row", gap: 15 },
+  
+  catGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  catChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: "white", borderWidth: 1.5, borderColor: "#F1F5F9" },
+  catChipTxt: { fontSize: 12, fontWeight: "800", color: "#64748B" },
+  
+  submit: { height: 60, borderRadius: 22, overflow: "hidden", marginTop: 20, elevation: 8 },
+  submitGradient: { flex: 1, alignItems: "center", justifyContent: "center" },
+  submitTxt: { color: "white", fontWeight: "900", fontSize: 16, letterSpacing: 1 },
+  disabled: { opacity: 0.5 },
 });

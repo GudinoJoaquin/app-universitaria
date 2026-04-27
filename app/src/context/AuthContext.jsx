@@ -307,8 +307,8 @@ export const AuthProvider = ({ children }) => {
   const isAdmin = () => user?.role === "Admin";
   const isHelper = () => user?.role === "Helper";
   const isOrganizer = () => user?.role === "Organizer";
-  const canManageStates = () => ["Admin", "Helper"].includes(user?.role);
-  const canManageAllEvents = () => ["Admin", "Helper"].includes(user?.role);
+  const canManageStates = () => ["Admin", "Helper", "Organizer"].includes(user?.role);
+  const canManageAllEvents = () => ["Admin", "Helper", "Organizer"].includes(user?.role);
 
   return (
     <AuthContext.Provider

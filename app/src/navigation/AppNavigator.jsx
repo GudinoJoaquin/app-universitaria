@@ -128,9 +128,9 @@ export default function AppNavigator() {
             <Stack.Screen 
               name="EventDetails" 
               component={EventDetailsScreen} 
-              options={{ headerShown: true, title: "Detalles del Evento", headerBackTitle: "Atrás" }} 
+              options={{ headerShown: false }} 
             />
-            <Stack.Screen name="CreateEvent" component={EventCreateScreen} options={{ headerShown: true, title: "Gestión de Evento" }} />
+            <Stack.Screen name="CreateEvent" component={EventCreateScreen} options={{ headerShown: false }} />
             <Stack.Screen name="AdminCategories" component={AdminCategoriesScreen} options={{ headerShown: false }} />
             <Stack.Screen name="UserManagement" component={UserManagementScreen} options={{ headerShown: false }} />
             <Stack.Screen name="SystemConfig" component={SystemConfigScreen} options={{ headerShown: false }} />
