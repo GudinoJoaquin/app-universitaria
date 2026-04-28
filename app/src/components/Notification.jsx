@@ -3,6 +3,8 @@ import { Text, View, Platform } from "react-native";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
+import { eventsService } from "../services/eventsService";
+import { useAuth } from "../context/AuthContext";
 
 const isExpoGo = Constants.executionEnvironment === "storeClient";
 
@@ -18,7 +20,7 @@ if (!isExpoGo) {
 
 async function sendPushNotification(expoPushToken, title, body) {
   if (isExpoGo || !expoPushToken) return;
-  
+
   const message = {
     to: expoPushToken,
     sound: "default",
@@ -40,7 +42,9 @@ async function sendPushNotification(expoPushToken, title, body) {
 
 async function registerForPushNotificationsAsync() {
   if (isExpoGo) {
-    console.log("ℹ️ Modo Expo Go detectado: Saltando configuración de notificaciones remotas.");
+    console.log(
+      "ℹ️ Modo Expo Go detectado: Saltando configuración de notificaciones remotas.",
+    );
     return null;
   }
 
@@ -59,25 +63,27 @@ async function registerForPushNotificationsAsync() {
       return null;
     }
 
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    const { status: existingStatus } =
+      await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     if (existingStatus !== "granted") {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
-    
+
     if (finalStatus !== "granted") return null;
 
     const projectId =
       Constants?.expoConfig?.extra?.eas?.projectId ??
       Constants?.easConfig?.projectId;
-    
+
     if (!projectId) {
       console.warn("Project ID not found for push notifications");
       return null;
     }
 
-    const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    const token = (await Notifications.getExpoPushTokenAsync({ projectId }))
+      .data;
     console.log("Push Token:", token);
     return token;
   } catch (e) {
@@ -86,9 +92,64 @@ async function registerForPushNotificationsAsync() {
   }
 }
 
-export default function Notification({ title, body }) {
+async function scheduleEventNotifications() {
+  try {
+    // Cancelar notificaciones programadas anteriores
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    scheduledNotifications.current.clear();
+
+    // Obtener eventos
+    const { success, events } = await eventsService.getEvents();
+    if (!success) return;
+
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
+    const todaysEvents = events.filter((event) => event.date === today);
+
+    for (const event of todaysEvents) {
+      const eventTime = event.start_time ? new Date(event.start_time) : null;
+      let notificationTime;
+
+      if (eventTime) {
+        // Notificar 1 hora antes si hay tiempo específico
+        notificationTime = new Date(eventTime.getTime() - 60 * 60 * 1000); // 1 hora antes
+        if (notificationTime <= new Date()) continue; // Si ya pasó, no notificar
+      } else {
+        // Si no hay tiempo, notificar a las 9 AM
+        const [year, month, day] = today.split("-");
+        notificationTime = new Date(year, month - 1, day, 9, 0, 0);
+        if (notificationTime <= new Date()) continue;
+      }
+
+      const timeString = eventTime
+        ? eventTime.toLocaleTimeString("es-ES", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "Todo el día";
+      const body = `📅 ${event.title}\n🕒 ${timeString}\n📍 ${event.location}`;
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "¡Evento hoy!",
+          body: body,
+          sound: "default",
+          data: { eventId: event.id },
+        },
+        trigger: { date: notificationTime },
+      });
+
+      scheduledNotifications.current.add(event.id);
+    }
+  } catch (error) {
+    console.log("Error programando notificaciones:", error);
+  }
+}
+
+export default function Notification() {
   const [expoPushToken, setExpoPushToken] = useState("");
-  const [trigger, setTrigger] = useState(true);
+  const { user } = useAuth();
+  const scheduledNotifications = useRef(new Set());
 
   useEffect(() => {
     registerForPushNotificationsAsync().then((token) => {
@@ -97,20 +158,10 @@ export default function Notification({ title, body }) {
   }, []);
 
   useEffect(() => {
-    if (trigger && expoPushToken && !isExpoGo) {
-      sendPushNotification(expoPushToken, title, body);
+    if (expoPushToken && user) {
+      scheduleEventNotifications();
     }
-  }, [trigger, expoPushToken]);
-
-  useEffect(() => {
-    const dias = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
-    const hoy = new Date();
-    const today = dias[hoy.getDay()];
-
-    if (today === "lunes") {
-      setTrigger(true);
-    }
-  }, []);
+  }, [expoPushToken, user]);
 
   return null;
 }
