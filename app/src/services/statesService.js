@@ -110,16 +110,21 @@ export const getUserStates = async (userId) => {
   }
 };
 
-/** Asigna un estado a un usuario (insert en user_states) */
+/** Asigna un estado a un usuario (upsert en user_states para evitar duplicados) */
 export const assignStateToUser = async (userId, stateId) => {
   try {
     if (!userId || !stateId) throw new Error('Usuario y estado son requeridos');
     const { error } = await supabase
       .from('user_states')
-      .insert({ user_id: userId, state_id: stateId });
+      .upsert(
+        { user_id: userId, state_id: stateId }, 
+        { onConflict: 'user_id,state_id' }
+      );
     if (error) throw error;
     return { success: true };
   } catch (error) {
+    // Si el error es de duplicado (aunque upsert debería manejarlo), lo silenciamos
+    if (error.code === '23505') return { success: true };
     return { success: false, error: error.message };
   }
 };

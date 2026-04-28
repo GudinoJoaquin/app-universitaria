@@ -15,7 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import styles from "../styles/LoginScreenStyle";
-import Notification from "../components/Notification";
+// import Notification from "../components/Notification";
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -25,6 +25,7 @@ export default function LoginScreen({ navigation }) {
   const [errors, setErrors] = useState({});
   const { login, loginWithGoogle, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
 
   const validateForm = () => {
     const newErrors = {};
@@ -55,12 +56,14 @@ export default function LoginScreen({ navigation }) {
       console.log("Resultado del login:", result);
 
       if (!result.success) {
-        Alert.alert("Error", result.message || "Credenciales incorrectas");
+        setLoginError(result.message || "Credenciales incorrectas");
+        Alert.alert("Error de acceso", result.message || "Las credenciales no coinciden con nuestros registros.");
       }
       // La navegación se maneja automáticamente en el AuthContext
     } catch (error) {
       console.error("Error en login:", error);
-      Alert.alert("Error", "Error de conexión con el servidor");
+      setLoginError("Error de conexión. Inténtalo de nuevo.");
+      Alert.alert("Error", "No pudimos conectar con el servidor. Verifica tu internet.");
     } finally {
       setLoading(false);
     }
@@ -69,6 +72,7 @@ export default function LoginScreen({ navigation }) {
   const handleChange = (field, value) => {
     if (field === "email") setEmail(value);
     if (field === "password") setPassword(value);
+    setLoginError(""); // Limpiar error general
 
     // Limpiar error del campo cuando el usuario escribe
     if (errors[field]) {
@@ -97,7 +101,7 @@ export default function LoginScreen({ navigation }) {
       colors={["#0f172a", "#1e3a8a", "#3b82f6"]}
       style={{ flex: 1 }}
     >
-      <Notification body={"Hola, hoy es lunes"} title={"Día de la semana"} />
+      
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -171,6 +175,13 @@ export default function LoginScreen({ navigation }) {
             >
               Bienvenido de nuevo
             </Text>
+
+            {loginError ? (
+              <View style={{ backgroundColor: "#FEF2F2", padding: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: "#FEE2E2", flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="alert-circle" size={20} color="#EF4444" style={{ marginRight: 8 }} />
+                <Text style={{ color: "#B91C1C", fontSize: 14, fontWeight: "500", flex: 1 }}>{loginError}</Text>
+              </View>
+            ) : null}
 
             {/* Campo Email */}
             <View style={styles.inputContainer}>

@@ -38,7 +38,9 @@ export const updateUserRole = async (req, res) => {
 
     const callerId = req.user.id;
     const callerRole = req.user.role;
-    const callerPower = ROLE_HIERARCHY[callerRole] || 0;
+    // Normalizar a Capitalized para buscar en el mapa
+    const normalizedCallerRole = callerRole ? (callerRole.charAt(0).toUpperCase() + callerRole.slice(1).toLowerCase()) : "";
+    const callerPower = ROLE_HIERARCHY[normalizedCallerRole] || 0;
 
     // 1. Nadie puede cambiarse su propio ROL
     if (callerId === id) {
@@ -49,21 +51,24 @@ export const updateUserRole = async (req, res) => {
     const [target] = await connection.execute("SELECT role FROM profiles WHERE id = ?", [id]);
     if (target.length === 0) return res.status(404).json({ error: "Usuario no encontrado" });
     const targetCurrentRole = target[0].role;
-    const targetPower = ROLE_HIERARCHY[targetCurrentRole] || 0;
-    const newRolePower = ROLE_HIERARCHY[newRole];
+    const normalizedTargetRole = targetCurrentRole ? (targetCurrentRole.charAt(0).toUpperCase() + targetCurrentRole.slice(1).toLowerCase()) : "";
+    const targetPower = ROLE_HIERARCHY[normalizedTargetRole] || 0;
+    
+    // Normalizar nuevo rol
+    const normalizedNewRole = newRole ? (newRole.charAt(0).toUpperCase() + newRole.slice(1).toLowerCase()) : "";
+    const newRolePower = ROLE_HIERARCHY[normalizedNewRole] || 0;
 
     // 3. REGLA: El que llama debe tener un rango ESTRICTAMENTE MAYOR al del objetivo 
     // y al del nuevo rol que quiere asignar.
-    // Esto evita que un Admin cree otro Admin, o un Helper cree otro Helper.
     if (callerPower <= targetPower) {
       return res.status(403).json({ 
-        error: `Como ${callerRole}, no tienes autoridad para modificar a un ${targetCurrentRole}.` 
+        error: `Acceso Denegado: Como ${callerRole}, no tienes autoridad para modificar a un ${targetCurrentRole}.` 
       });
     }
 
     if (callerPower <= newRolePower) {
       return res.status(403).json({ 
-        error: `Como ${callerRole}, no tienes permiso para otorgar el rango de ${newRole}.` 
+        error: `Acceso Denegado: Como ${callerRole}, no tienes permiso para otorgar el rango de ${newRole}.` 
       });
     }
 
