@@ -5,25 +5,25 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../modules/auth/context/AuthContext";
 
 // Auth screens
-import LoginScreen from "../screens/LoginScreens";
-import RegisterScreen from "../screens/RegisterScreen";
-import FirstTimeSetupScreen from "../screens/FirstTimeSetupScreen";
+import LoginScreen from "../modules/auth/screens/LoginScreen";
+import RegisterScreen from "../modules/auth/screens/RegisterScreen";
+import FirstTimeSetupScreen from "../modules/auth/screens/FirstTimeSetupScreen";
 
 // Main screens
-import EventDashboardScreen from "../screens/EventScreens"; // Unified Events Hub
-import ProfileScreen from "../screens/ProfileScreen";
-import GestionScreen from "../screens/GestionScreen"; 
-import AdminCategoriesScreen from "../screens/AdminCategoriesScreen";
-import SystemConfigScreen from "../screens/SystemConfigScreen";
-import UserManagementScreen from "../screens/UserManagementScreen";
-import AdminStatesScreen from "../screens/AdminStatesScreen";
+import EventDashboardScreen from "../modules/events/screens/EventDashboardScreen"; 
+import ProfileScreen from "../modules/profile/screens/ProfileScreen";
+import GestionScreen from "../modules/gestion/screens/GestionScreen"; 
+import AdminCategoriesScreen from "../modules/gestion/screens/AdminCategoriesScreen";
+import SystemConfigScreen from "../modules/gestion/screens/SystemConfigScreen";
+import UserManagementScreen from "../modules/gestion/screens/UserManagementScreen";
+import AdminStatesScreen from "../modules/gestion/screens/AdminStatesScreen";
 
 // Event detail & create
-import EventDetailsScreen from "../screens/EventDetailScreen";
-import EventCreateScreen from "../screens/EventCreateScreen";
+import EventDetailsScreen from "../modules/events/screens/EventDetailScreen";
+import EventCreateScreen from "../modules/events/screens/EventCreateScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -37,7 +37,7 @@ function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: "#2563EB",
+        tabBarActiveTintColor: "#0F172A",
         tabBarInactiveTintColor: "#9CA3AF",
         tabBarShowLabel: true,
         tabBarStyle: {
@@ -103,11 +103,11 @@ export default function AppNavigator() {
           screens: {
             EventsTab: "events",
             ManagementTab: "management",
-            UserManagement: "users",
-            SystemConfig: "config",
             ProfileTab: "profile",
           },
         },
+        UserManagement: "users",
+        SystemConfig: "config",
       },
     },
   };
@@ -144,3 +144,5 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
+
+

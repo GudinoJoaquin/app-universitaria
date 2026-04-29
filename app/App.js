@@ -1,6 +1,6 @@
-import { AuthProvider } from "./src/context/AuthContext";
+import { AuthProvider } from "./src/modules/auth/context/AuthContext";
 import AppNavigator from "./src/navigation/AppNavigator";
-import Notification from "./src/components/Notification";
+import Notification from "./src/modules/notifications/components/Notification";
 
 export default function App() {
   return (
