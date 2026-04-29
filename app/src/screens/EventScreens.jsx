@@ -6,11 +6,12 @@ import {
   Dimensions, Platform, Pressable
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { useFocusEffect } from "@react-navigation/native";
 import { supabase } from "../services/supabase";
 import { eventsService } from "../services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import Notification from "../components/Notification";
+// import Notification from "../components/Notification";
 import {
   registerToEvent, unregisterFromEvent,
   getMyRegistrations,
@@ -127,11 +128,28 @@ export default function EventDashboardScreen({ navigation }) {
     }
   }, [user?.id, isAdmin, isHelper, sortBy]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
   const filteredData = useMemo(() => {
-    let base = activeTab === 0 ? allEvents : activeTab === 1 ? myInscribedEvents : myManagedEvents;
+    // Definimos la base según la pestaña
+    let base = [];
+    if (activeTab === 0) {
+      // EXPLORAR: Ocultamos los eventos donde YA estamos inscritos
+      base = allEvents.filter(e => !registeredIds.has(e.id));
+    } else if (activeTab === 1) {
+      // INSCRITO: Solo los eventos donde estamos inscritos
+      base = myInscribedEvents;
+    } else {
+      // ORGANIZAR: Eventos que gestionamos
+      base = myManagedEvents;
+    }
+
     return base.filter(item => {
       const matchesSearch = item.title?.toLowerCase().includes(searchText.toLowerCase()) || item.location?.toLowerCase().includes(searchText.toLowerCase());
       const matchesCategory = selectedCategoryIds.length === 0 || item.categories?.some(c => selectedCategoryIds.includes(c.id));
@@ -139,7 +157,7 @@ export default function EventDashboardScreen({ navigation }) {
       const matchesStatus = filterStatus === "all" || (filterStatus === "past" && status.id === "past") || (filterStatus === "ongoing" && status.id === "ongoing") || (filterStatus === "upcoming" && status.id === "scheduled");
       return matchesSearch && matchesCategory && matchesStatus;
     });
-  }, [activeTab, allEvents, myInscribedEvents, myManagedEvents, searchText, selectedCategoryIds, filterStatus]);
+  }, [activeTab, allEvents, myInscribedEvents, myManagedEvents, registeredIds, searchText, selectedCategoryIds, filterStatus]);
 
   const handleDeleteEvent = (id) => {
     Alert.alert("Eliminar Evento", "¿Estás seguro de eliminar este evento permanentemente?", [
