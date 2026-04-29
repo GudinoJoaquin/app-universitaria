@@ -1,3 +1,4 @@
+// EventCreateScreen.jsx - Versión completa corregida
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -149,7 +150,6 @@ export default function EventCreateScreen({ route, navigation }) {
       };
 
       if (useTime) {
-        // Combinar fecha con hora seleccionada
         const start = new Date(
           formData.date +
             "T" +
@@ -220,16 +220,17 @@ export default function EventCreateScreen({ route, navigation }) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={s.scroll}
         >
+          {/* HEADER CORREGIDO */}
           <LinearGradient colors={["#0F172A", "#1E293B"]} style={s.header}>
-            <TouchableOpacity
-              style={s.backBtn}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            <Text style={s.headerTitle}>
-              {isEditing ? "Editar" : "Crear"} Evento
-            </Text>
+            <View style={s.headerContent}>
+              <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+                <Ionicons name="arrow-back" size={24} color="white" />
+              </TouchableOpacity>
+              <Text style={s.headerTitle}>
+                {isEditing ? "Editar" : "Crear"} Evento
+              </Text>
+              <View style={{ width: 40 }} /> {/* Espaciador para centrar el título */}
+            </View>
           </LinearGradient>
 
           <View style={s.form}>
@@ -442,25 +443,34 @@ export default function EventCreateScreen({ route, navigation }) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   scroll: { paddingBottom: 50 },
+  
+  // HEADER CORREGIDO
   header: {
-    height: 160,
-    padding: 25,
-    justifyContent: "flex-end",
+    paddingTop: 60,
+    paddingBottom: 20,
     borderBottomLeftRadius: 35,
     borderBottomRightRadius: 35,
   },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+  },
   backBtn: {
-    position: "absolute",
-    top: 60,
-    left: 25,
-    width: 45,
-    height: 45,
-    borderRadius: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "rgba(255,255,255,0.15)",
     justifyContent: "center",
     alignItems: "center",
   },
-  headerTitle: { fontSize: 28, fontWeight: "900", color: "white" },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "white",
+    textAlign: "center",
+  },
 
   form: { padding: 25, marginTop: -25, gap: 20 },
   imgBox: {

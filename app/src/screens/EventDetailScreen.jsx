@@ -1,3 +1,4 @@
+// EventDetailsScreen.jsx - Versión corregida
 import React, { useState, useEffect } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, Alert,
@@ -93,15 +94,21 @@ export default function EventDetailsScreen({ route, navigation }) {
   return (
     <View style={s.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scrollContent}>
-        {/* Cinematic Hero */}
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={s.scrollContent}
+      >
+        {/* Hero Image */}
         <View style={s.hero}>
           {event.image_url ? (
             <Image source={{ uri: event.image_url }} style={s.heroImg} contentFit="cover" />
           ) : (
             <LinearGradient colors={["#1E1B4B", "#0F172A"]} style={s.heroImg} />
           )}
-          <LinearGradient colors={["rgba(0,0,0,0.4)", "transparent", "rgba(15, 23, 42, 0.9)"]} style={StyleSheet.absoluteFill} />
+          <LinearGradient 
+            colors={["rgba(0,0,0,0.5)", "transparent", "rgba(15, 23, 42, 0.95)"]} 
+            style={StyleSheet.absoluteFill} 
+          />
           <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
@@ -109,70 +116,111 @@ export default function EventDetailsScreen({ route, navigation }) {
             <View style={[s.statusBadge, { backgroundColor: status.bg }]}>
               <Text style={[s.statusTxt, { color: status.color }]}>{status.label}</Text>
             </View>
-            <Text style={s.title}>{event.title}</Text>
+            <Text style={s.title} numberOfLines={3}>{event.title}</Text>
           </View>
         </View>
 
-        {/* Dynamic Content */}
+        {/* Contenido */}
         <View style={s.body}>
+          {/* Grid de info - corregido */}
           <View style={s.infoGrid}>
             <View style={s.infoCard}>
-              <View style={[s.iconBox, { backgroundColor: "#EFF6FF" }]}><Ionicons name="calendar" size={20} color="#3B82F6" /></View>
-              <View><Text style={s.infoLabel}>FECHA</Text><Text style={s.infoVal}>{formatDate(event.date)}</Text></View>
+              <View style={[s.iconBox, { backgroundColor: "#EFF6FF" }]}>
+                <Ionicons name="calendar" size={20} color="#3B82F6" />
+              </View>
+              <View style={s.infoTextContainer}>
+                <Text style={s.infoLabel}>FECHA</Text>
+                <Text style={s.infoVal} numberOfLines={2}>{formatDate(event.date)}</Text>
+              </View>
             </View>
             <View style={s.infoCard}>
-              <View style={[s.iconBox, { backgroundColor: "#FEF2F2" }]}><Ionicons name="time" size={20} color="#EF4444" /></View>
-              <View><Text style={s.infoLabel}>HORARIO</Text><Text style={s.infoVal}>{formatTimeRange(event.start_time, event.end_time)}</Text></View>
+              <View style={[s.iconBox, { backgroundColor: "#FEF2F2" }]}>
+                <Ionicons name="time" size={20} color="#EF4444" />
+              </View>
+              <View style={s.infoTextContainer}>
+                <Text style={s.infoLabel}>HORARIO</Text>
+                <Text style={s.infoVal} numberOfLines={2}>{formatTimeRange(event.start_time, event.end_time)}</Text>
+              </View>
             </View>
           </View>
 
+          {/* Ubicación */}
           <View style={s.locationCard}>
-            <View style={[s.iconBox, { backgroundColor: "#ECFDF5" }]}><Ionicons name="location" size={20} color="#10B981" /></View>
-            <View style={{ flex: 1 }}><Text style={s.infoLabel}>UBICACIÓN</Text><Text style={s.infoVal}>{event.location}</Text></View>
+            <View style={[s.iconBox, { backgroundColor: "#ECFDF5" }]}>
+              <Ionicons name="location" size={20} color="#10B981" />
+            </View>
+            <View style={s.locationTextContainer}>
+              <Text style={s.infoLabel}>UBICACIÓN</Text>
+              <Text style={s.infoVal} numberOfLines={3}>{event.location}</Text>
+            </View>
           </View>
 
+          {/* Descripción */}
           <View style={s.section}>
             <Text style={s.sectionTitle}>Sobre el evento</Text>
-            <Text style={s.desc}>{event.description || "Sin descripción proporcionada."}</Text>
+            <Text style={s.desc}>
+              {event.description || "Sin descripción proporcionada."}
+            </Text>
           </View>
 
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Categorías</Text>
-            <View style={s.catRow}>
-              {event.categories?.map(c => (
-                <View key={c.id} style={[s.catTag, { borderColor: c.color }]}>
-                  <Text style={[s.catTagTxt, { color: c.color }]}>{c.name}</Text>
-                </View>
-              ))}
+          {/* Categorías */}
+          {event.categories?.length > 0 && (
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Categorías</Text>
+              <View style={s.catRow}>
+                {event.categories.map(c => (
+                  <View key={c.id} style={[s.catTag, { borderColor: c.color, backgroundColor: c.color + "10" }]}>
+                    <Text style={[s.catTagTxt, { color: c.color }]}>{c.name}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
+          )}
 
+          {/* Participantes */}
           <View style={s.section}>
             <View style={s.pHeader}>
               <Text style={s.sectionTitle}>Participantes</Text>
               <Text style={s.pCount}>{participants.length} inscritos</Text>
             </View>
-            {loadingParticipants ? <ActivityIndicator size="small" /> : (
+            {loadingParticipants ? (
+              <ActivityIndicator size="small" color="#3B82F6" />
+            ) : participants.length > 0 ? (
               <View style={s.pList}>
-                {participants.slice(0, 6).map((p, i) => (
-                  <View key={p.id} style={[s.pAvatar, { marginLeft: i === 0 ? 0 : -15, zIndex: 10 - i }]}>
-                    <Text style={s.pAvatarTxt}>{p.name?.[0]?.toUpperCase()}</Text>
+                {participants.slice(0, 5).map((p, i) => (
+                  <View 
+                    key={p.id} 
+                    style={[
+                      s.pAvatar, 
+                      { marginLeft: i === 0 ? 0 : -12, zIndex: participants.length - i }
+                    ]}
+                  >
+                    <Text style={s.pAvatarTxt}>{p.name?.[0]?.toUpperCase() || "?"}</Text>
                   </View>
                 ))}
-                {participants.length > 6 && <View style={s.pMore}><Text style={s.pMoreTxt}>+{participants.length - 6}</Text></View>}
+                {participants.length > 5 && (
+                  <View style={[s.pMore, { marginLeft: -12 }]}>
+                    <Text style={s.pMoreTxt}>+{participants.length - 5}</Text>
+                  </View>
+                )}
               </View>
+            ) : (
+              <Text style={s.noParticipants}>Aún no hay participantes inscritos.</Text>
             )}
           </View>
         </View>
-        <View style={{ height: 120 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Glass ActionBar */}
+      {/* Action Bar fijo */}
       <View style={s.actionBar}>
         <LinearGradient colors={["rgba(255,255,255,0)", "white", "white"]} style={s.actionBarBg} />
         <View style={s.actionRow}>
           {(isAdmin() || user?.id === event.created_by) && (
-            <TouchableOpacity style={s.editBtn} onPress={() => navigation.navigate("CreateEvent", { event })}>
+            <TouchableOpacity 
+              style={s.editBtn} 
+              onPress={() => navigation.navigate("CreateEvent", { event })}
+            >
               <Ionicons name="create-outline" size={24} color="#F59E0B" />
             </TouchableOpacity>
           )}
@@ -181,11 +229,23 @@ export default function EventDetailsScreen({ route, navigation }) {
             onPress={handleToggleRegistration} 
             disabled={actionLoading || status.label === "FINALIZADO"}
           >
-            <LinearGradient colors={isRegistered ? ["#F1F5F9", "#E2E8F0"] : ["#1E1B4B", "#312E81"]} style={s.btnGradient}>
-              {actionLoading ? <ActivityIndicator color={isRegistered ? "#1E1B4B" : "white"} /> : (
+            <LinearGradient 
+              colors={isRegistered ? ["#F1F5F9", "#E2E8F0"] : ["#1E1B4B", "#312E81"]} 
+              style={s.btnGradient}
+            >
+              {actionLoading ? (
+                <ActivityIndicator color={isRegistered ? "#1E1B4B" : "white"} />
+              ) : (
                 <>
-                  <Ionicons name={isRegistered ? "checkmark-circle" : "calendar"} size={22} color={isRegistered ? "#3B82F6" : "white"} style={{ marginRight: 10 }} />
-                  <Text style={[s.btnTxt, isRegistered && { color: "#1E293B" }]}>{isRegistered ? "Inscrito" : "Inscribirme"}</Text>
+                  <Ionicons 
+                    name={isRegistered ? "checkmark-circle" : "calendar"} 
+                    size={22} 
+                    color={isRegistered ? "#3B82F6" : "white"} 
+                    style={{ marginRight: 10 }} 
+                  />
+                  <Text style={[s.btnTxt, isRegistered && { color: "#1E293B" }]}>
+                    {isRegistered ? "Inscrito" : "Inscribirme"}
+                  </Text>
                 </>
               )}
             </LinearGradient>
@@ -199,43 +259,157 @@ export default function EventDetailsScreen({ route, navigation }) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "white" },
   scrollContent: { paddingBottom: 20 },
-  hero: { height: height * 0.45, justifyContent: "flex-end", padding: 25 },
+  
+  hero: { 
+    height: height * 0.45, 
+    justifyContent: "flex-end", 
+    padding: 20,
+    position: "relative",
+  },
   heroImg: { ...StyleSheet.absoluteFillObject },
-  backBtn: { position: "absolute", top: 60, left: 25, width: 48, height: 48, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
-  heroMeta: { gap: 10 },
-  statusBadge: { alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  backBtn: { 
+    position: "absolute", 
+    top: 60, 
+    left: 20, 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    backgroundColor: "rgba(255,255,255,0.2)", 
+    justifyContent: "center", 
+    alignItems: "center",
+    zIndex: 10,
+  },
+  heroMeta: { gap: 12, marginBottom: 20 },
+  statusBadge: { 
+    alignSelf: "flex-start", 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    borderRadius: 20,
+  },
   statusTxt: { fontSize: 11, fontWeight: "900" },
-  title: { fontSize: 34, fontWeight: "900", color: "white", letterSpacing: -1, lineHeight: 40 },
+  title: { 
+    fontSize: 28, 
+    fontWeight: "900", 
+    color: "white", 
+    letterSpacing: -0.5, 
+    lineHeight: 36,
+  },
   
-  body: { paddingHorizontal: 25, marginTop: -30 },
-  infoGrid: { flexDirection: "row", gap: 15 },
-  infoCard: { flex: 1, backgroundColor: "white", borderRadius: 24, padding: 18, elevation: 15, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 20, flexDirection: "row", alignItems: "center", gap: 12 },
-  iconBox: { width: 44, height: 44, borderRadius: 14, justifyContent: "center", alignItems: "center" },
-  infoLabel: { fontSize: 10, fontWeight: "900", color: "#94A3B8" },
-  infoVal: { fontSize: 13, fontWeight: "800", color: "#1E293B" },
+  body: { paddingHorizontal: 20, marginTop: -25, backgroundColor: "white", borderTopLeftRadius: 25, borderTopRightRadius: 25, paddingTop: 20 },
   
-  locationCard: { backgroundColor: "white", borderRadius: 24, padding: 18, elevation: 15, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 20, flexDirection: "row", alignItems: "center", gap: 12, marginTop: 15 },
+  infoGrid: { flexDirection: "row", gap: 12, marginBottom: 12 },
+  infoCard: { 
+    flex: 1, 
+    backgroundColor: "white", 
+    borderRadius: 20, 
+    padding: 14, 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  iconBox: { width: 42, height: 42, borderRadius: 14, justifyContent: "center", alignItems: "center" },
+  infoTextContainer: { flex: 1 },
+  infoLabel: { fontSize: 10, fontWeight: "900", color: "#94A3B8", letterSpacing: 0.5, marginBottom: 4 },
+  infoVal: { fontSize: 13, fontWeight: "700", color: "#1E293B", lineHeight: 18 },
   
-  section: { marginTop: 35 },
-  sectionTitle: { fontSize: 20, fontWeight: "900", color: "#1E293B", marginBottom: 15 },
-  desc: { fontSize: 16, color: "#475569", lineHeight: 26, fontWeight: "500" },
-  catRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  catTag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1.5 },
-  catTagTxt: { fontSize: 12, fontWeight: "800" },
+  locationCard: { 
+    backgroundColor: "white", 
+    borderRadius: 20, 
+    padding: 14, 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    marginBottom: 8,
+  },
+  locationTextContainer: { flex: 1 },
   
-  pHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
-  pCount: { fontSize: 14, fontWeight: "700", color: "#3B82F6" },
-  pList: { flexDirection: "row", alignItems: "center" },
-  pAvatar: { width: 45, height: 45, borderRadius: 20, borderWidth: 3, borderColor: "white", backgroundColor: "#EEF2FF", justifyContent: "center", alignItems: "center" },
+  section: { marginTop: 24 },
+  sectionTitle: { fontSize: 18, fontWeight: "900", color: "#1E293B", marginBottom: 12 },
+  desc: { fontSize: 15, color: "#475569", lineHeight: 24, fontWeight: "500" },
+  
+  catRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  catTag: { 
+    paddingHorizontal: 14, 
+    paddingVertical: 7, 
+    borderRadius: 20, 
+    borderWidth: 1.5,
+  },
+  catTagTxt: { fontSize: 13, fontWeight: "700" },
+  
+  pHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  pCount: { fontSize: 13, fontWeight: "700", color: "#3B82F6", backgroundColor: "#EFF6FF", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  pList: { flexDirection: "row", alignItems: "center", flexWrap: "wrap" },
+  pAvatar: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    borderWidth: 2, 
+    borderColor: "white", 
+    backgroundColor: "#EEF2FF", 
+    justifyContent: "center", 
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
   pAvatarTxt: { fontWeight: "900", color: "#4F46E5", fontSize: 16 },
-  pMore: { width: 45, height: 45, borderRadius: 20, backgroundColor: "#F8FAFC", justifyContent: "center", alignItems: "center", marginLeft: -15, borderWidth: 1, borderColor: "#E2E8F0" },
+  pMore: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    backgroundColor: "#F8FAFC", 
+    justifyContent: "center", 
+    alignItems: "center", 
+    borderWidth: 2, 
+    borderColor: "#E2E8F0",
+  },
   pMoreTxt: { fontSize: 12, fontWeight: "800", color: "#64748B" },
+  noParticipants: { fontSize: 14, color: "#94A3B8", textAlign: "center", paddingVertical: 20 },
   
-  actionBar: { position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 25, paddingBottom: 40 },
-  actionBarBg: { position: "absolute", bottom: 0, left: 0, right: 0, height: 160 },
-  actionRow: { flexDirection: "row", gap: 15 },
-  editBtn: { width: 60, height: 60, borderRadius: 22, backgroundColor: "white", elevation: 10, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#F1F5F9" },
-  mainBtn: { flex: 1, height: 60, borderRadius: 22, overflow: "hidden", elevation: 10 },
+  actionBar: { 
+    position: "absolute", 
+    bottom: 0, 
+    left: 0, 
+    right: 0, 
+    paddingHorizontal: 20, 
+    paddingBottom: 30,
+    paddingTop: 10,
+  },
+  actionBarBg: { position: "absolute", bottom: 0, left: 0, right: 0, height: 130 },
+  actionRow: { flexDirection: "row", gap: 12 },
+  editBtn: { 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28, 
+    backgroundColor: "white", 
+    justifyContent: "center", 
+    alignItems: "center", 
+    borderWidth: 1, 
+    borderColor: "#F1F5F9",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  mainBtn: { flex: 1, height: 56, borderRadius: 28, overflow: "hidden", elevation: 5 },
+  mainBtnReg: { elevation: 2 },
   btnGradient: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  btnTxt: { color: "white", fontSize: 17, fontWeight: "900" },
+  btnTxt: { color: "white", fontSize: 16, fontWeight: "900" },
 });

@@ -1,5 +1,10 @@
+// GestionScreen.jsx - Versión rediseñada profesional
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, StatusBar, TextInput, Pressable, ScrollView, TouchableOpacity, Modal, Dimensions } from "react-native";
+import { 
+  View, Text, StyleSheet, StatusBar, TextInput, 
+  Pressable, ScrollView, TouchableOpacity, Modal, 
+  Dimensions, SafeAreaView 
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
@@ -10,7 +15,7 @@ import UserListTab from "../components/management/UserListTab";
 import StatesListTab from "../components/management/StatesListTab";
 import CategoriesListTab from "../components/management/CategoriesListTab";
 
-const { height } = Dimensions.get("window");
+const { height, width } = Dimensions.get("window");
 
 const ROLES = [
   { id: "Admin", label: "Administrador", color: "#EF4444", icon: "shield-checkmark" },
@@ -52,111 +57,187 @@ export default function GestionScreen({ navigation }) {
   const selectedRole = ROLES.find(r => r.id === filterRole);
   const selectedState = states.find(s => s.id === filterStateId);
 
+  const getTabIcon = (tabName) => {
+    switch(tabName) {
+      case "Usuarios": return "people";
+      case "Estados": return "layers";
+      case "Categorías": return "grid";
+      default: return "settings";
+    }
+  };
+
   return (
-    <View style={s.container}>
-      <StatusBar barStyle="light-content" />
-      <LinearGradient colors={["#1E3A8A", "#3B82F6"]} style={s.header}>
-        <View style={s.headerContent}>
-          <View style={s.titleRow}>
-            <Text style={s.headerTitle}>Gestión Hub ⚙️</Text>
-            {(filterRole || filterStateId || searchText !== "") && (
-              <TouchableOpacity onPress={clearFilters} style={s.clearBtn}>
-                <Ionicons name="close-circle" size={14} color="white" />
-                <Text style={s.clearBtnTxt}>Limpiar</Text>
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" />
+      
+      {/* Header mejorado */}
+      <LinearGradient colors={["#1E3A8A", "#2563EB"]} style={s.header}>
+        <View style={s.headerTop}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Ionicons name="arrow-back" size={22} color="white" />
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Gestión</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        
+        <Text style={s.headerSubtitle}>
+          Administra usuarios, estados y categorías
+        </Text>
+        
+        {/* Search Bar mejorada */}
+        <View style={s.searchWrapper}>
+          <View style={s.searchBar}>
+            <Ionicons name="search-outline" size={20} color="#94A3B8" />
+            <TextInput 
+              style={s.searchInput} 
+              placeholder={`Buscar en ${TABS[activeTab].toLowerCase()}...`} 
+              placeholderTextColor="#94A3B8" 
+              value={searchText}
+              onChangeText={setSearchText}
+            />
+            {searchText !== "" && (
+              <TouchableOpacity onPress={() => setSearchText("")}>
+                <Ionicons name="close-circle" size={18} color="#94A3B8" />
               </TouchableOpacity>
             )}
           </View>
           
-          <View style={s.searchBar}>
-            <Ionicons name="search" size={16} color="white" style={{ opacity: 0.7 }} />
-            <TextInput 
-              style={s.searchInput} 
-              placeholder={`Buscar en ${TABS[activeTab].toLowerCase()}...`} 
-              placeholderTextColor="rgba(255,255,255,0.6)" 
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-          </View>
+          {(filterRole || filterStateId) && (
+            <TouchableOpacity onPress={clearFilters} style={s.clearChip}>
+              <Ionicons name="close" size={14} color="#EF4444" />
+              <Text style={s.clearChipTxt}>Limpiar filtros</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Dropdowns Bar (Solo para Usuarios) */}
+        {/* Dropdowns Bar - Solo para usuarios */}
         {activeTab === 0 && (
-          <View style={s.dropdownsBar}>
+          <View style={s.filtersRow}>
             <TouchableOpacity 
-              style={[s.dropdownTrigger, filterRole && s.dropdownTriggerActive]} 
+              style={[s.filterChip, filterRole && s.filterChipActive]} 
               onPress={() => setRoleMenuVisible(true)}
             >
-              <Ionicons name="people-outline" size={14} color={filterRole ? "white" : "rgba(255,255,255,0.7)"} />
-              <Text style={[s.dropdownTriggerTxt, filterRole && s.dropdownTriggerTxtActive]} numberOfLines={1}>
-                {selectedRole ? selectedRole.label : "Rol: Todos"}
+              <Ionicons 
+                name="people-outline" 
+                size={16} 
+                color={filterRole ? "white" : "#64748B"} 
+              />
+              <Text style={[s.filterChipTxt, filterRole && s.filterChipTxtActive]}>
+                {selectedRole ? selectedRole.label : "Todos los roles"}
               </Text>
-              <Ionicons name="chevron-down" size={12} color="white" style={{ opacity: 0.6 }} />
+              <Ionicons 
+                name="chevron-down" 
+                size={14} 
+                color={filterRole ? "white" : "#94A3B8"} 
+              />
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={[s.dropdownTrigger, filterStateId && s.dropdownTriggerActive]} 
+              style={[s.filterChip, filterStateId && s.filterChipActive]} 
               onPress={() => setStateMenuVisible(true)}
             >
-              <Ionicons name="pricetags-outline" size={14} color={filterStateId ? "white" : "rgba(255,255,255,0.7)"} />
-              <Text style={[s.dropdownTriggerTxt, filterStateId && s.dropdownTriggerTxtActive]} numberOfLines={1}>
-                {selectedState ? selectedState.name : "Estado: Todos"}
+              <Ionicons 
+                name="pricetags-outline" 
+                size={16} 
+                color={filterStateId ? "white" : "#64748B"} 
+              />
+              <Text style={[s.filterChipTxt, filterStateId && s.filterChipTxtActive]}>
+                {selectedState ? selectedState.name : "Todos los estados"}
               </Text>
-              <Ionicons name="chevron-down" size={12} color="white" style={{ opacity: 0.6 }} />
+              <Ionicons 
+                name="chevron-down" 
+                size={14} 
+                color={filterStateId ? "white" : "#94A3B8"} 
+              />
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Tabs */}
+        {/* Tabs mejoradas */}
         <View style={s.tabBar}>
           {TABS.map((tab, i) => (
-            <Pressable key={tab} style={[s.tabItem, activeTab === i && s.tabItemActive]} onPress={() => { setActiveTab(i); setSearchText(""); }}>
-              <Text style={[s.tabText, activeTab === i && s.tabTextActive]}>{tab}</Text>
+            <Pressable 
+              key={tab} 
+              style={[s.tabItem, activeTab === i && s.tabItemActive]} 
+              onPress={() => { 
+                setActiveTab(i); 
+                setSearchText(""); 
+              }}
+            >
+              <Ionicons 
+                name={getTabIcon(tab)} 
+                size={18} 
+                color={activeTab === i ? "white" : "rgba(255,255,255,0.6)"} 
+                style={s.tabIcon}
+              />
+              <Text style={[s.tabText, activeTab === i && s.tabTextActive]}>
+                {tab}
+              </Text>
+              {activeTab === i && <View style={s.tabIndicator} />}
             </Pressable>
           ))}
         </View>
       </LinearGradient>
 
-      <View style={{ flex: 1 }}>
-        {activeTab === 0 && <UserListTab searchText={searchText} filterRole={filterRole} filterStateId={filterStateId} />}
+      {/* Content */}
+      <View style={s.content}>
+        {activeTab === 0 && (
+          <UserListTab 
+            searchText={searchText} 
+            filterRole={filterRole} 
+            filterStateId={filterStateId} 
+          />
+        )}
         {activeTab === 1 && <StatesListTab searchText={searchText} />}
         {activeTab === 2 && <CategoriesListTab searchText={searchText} />}
       </View>
 
-      {/* --- BOTTOM SHEETS --- */}
-
+      {/* Bottom Sheets - Mejorados */}
+      
       {/* Selector de Rol */}
       <Modal visible={roleMenuVisible} transparent animationType="slide" onRequestClose={() => setRoleMenuVisible(false)}>
         <View style={s.sheetOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setRoleMenuVisible(false)} />
           <View style={s.sheetContent}>
             <View style={s.sheetHandle} />
-            <Text style={s.sheetHeaderTitle}>Filtrar por Rol</Text>
             
-            <TouchableOpacity 
-              style={[s.sheetItem, !filterRole && s.sheetItemActive]} 
-              onPress={() => { setFilterRole(null); setRoleMenuVisible(false); }}
-            >
-              <View style={[s.sheetItemIcon, { backgroundColor: "#F1F5F9" }]}>
-                <Ionicons name="apps" size={20} color="#64748B" />
-              </View>
-              <Text style={[s.sheetItemTxt, !filterRole && s.sheetItemTxtActive]}>Todos los roles</Text>
-              {!filterRole && <Ionicons name="checkmark-circle" size={24} color="#3B82F6" />}
-            </TouchableOpacity>
-
-            {ROLES.map(r => (
-              <TouchableOpacity 
-                key={r.id} 
-                style={[s.sheetItem, filterRole === r.id && { backgroundColor: r.color + "08", borderColor: r.color + "20" }]} 
-                onPress={() => { setFilterRole(r.id); setRoleMenuVisible(false); }}
-              >
-                <View style={[s.sheetItemIcon, { backgroundColor: r.color + "15" }]}>
-                  <Ionicons name={r.icon} size={20} color={r.color} />
-                </View>
-                <Text style={[s.sheetItemTxt, filterRole === r.id && { color: r.color, fontWeight: "800" }]}>{r.label}</Text>
-                {filterRole === r.id && <Ionicons name="checkmark-circle" size={24} color={r.color} />}
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle}>Filtrar por Rol</Text>
+              <TouchableOpacity onPress={() => setRoleMenuVisible(false)}>
+                <Ionicons name="close" size={24} color="#94A3B8" />
               </TouchableOpacity>
-            ))}
-            <View style={{ height: 40 }} />
+            </View>
+            
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <TouchableOpacity 
+                style={[s.sheetItem, !filterRole && s.sheetItemActive]} 
+                onPress={() => { setFilterRole(null); setRoleMenuVisible(false); }}
+              >
+                <View style={[s.sheetItemIcon, { backgroundColor: "#F1F5F9" }]}>
+                  <Ionicons name="apps" size={20} color="#64748B" />
+                </View>
+                <Text style={[s.sheetItemTxt, !filterRole && s.sheetItemTxtActive]}>
+                  Todos los roles
+                </Text>
+                {!filterRole && <Ionicons name="checkmark-circle" size={22} color="#3B82F6" />}
+              </TouchableOpacity>
+
+              {ROLES.map(r => (
+                <TouchableOpacity 
+                  key={r.id} 
+                  style={[s.sheetItem, filterRole === r.id && { backgroundColor: r.color + "08" }]} 
+                  onPress={() => { setFilterRole(r.id); setRoleMenuVisible(false); }}
+                >
+                  <View style={[s.sheetItemIcon, { backgroundColor: r.color + "15" }]}>
+                    <Ionicons name={r.icon} size={20} color={r.color} />
+                  </View>
+                  <Text style={[s.sheetItemTxt, filterRole === r.id && { color: r.color, fontWeight: "700" }]}>
+                    {r.label}
+                  </Text>
+                  {filterRole === r.id && <Ionicons name="checkmark-circle" size={22} color={r.color} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -167,75 +248,278 @@ export default function GestionScreen({ navigation }) {
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setStateMenuVisible(false)} />
           <View style={[s.sheetContent, { maxHeight: height * 0.7 }]}>
             <View style={s.sheetHandle} />
-            <Text style={s.sheetHeaderTitle}>Filtrar por Estado</Text>
             
-            <TouchableOpacity 
-              style={[s.sheetItem, !filterStateId && s.sheetItemActive]} 
-              onPress={() => { setFilterStateId(null); setStateMenuVisible(false); }}
-            >
-              <View style={[s.sheetItemIcon, { backgroundColor: "#F1F5F9" }]}>
-                <Ionicons name="layers" size={20} color="#64748B" />
-              </View>
-              <Text style={[s.sheetItemTxt, !filterStateId && s.sheetItemTxtActive]}>Todos los estados</Text>
-              {!filterStateId && <Ionicons name="checkmark-circle" size={24} color="#3B82F6" />}
-            </TouchableOpacity>
-
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle}>Filtrar por Estado</Text>
+              <TouchableOpacity onPress={() => setStateMenuVisible(false)}>
+                <Ionicons name="close" size={24} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+            
             <ScrollView showsVerticalScrollIndicator={false}>
+              <TouchableOpacity 
+                style={[s.sheetItem, !filterStateId && s.sheetItemActive]} 
+                onPress={() => { setFilterStateId(null); setStateMenuVisible(false); }}
+              >
+                <View style={[s.sheetItemIcon, { backgroundColor: "#F1F5F9" }]}>
+                  <Ionicons name="layers" size={20} color="#64748B" />
+                </View>
+                <Text style={[s.sheetItemTxt, !filterStateId && s.sheetItemTxtActive]}>
+                  Todos los estados
+                </Text>
+                {!filterStateId && <Ionicons name="checkmark-circle" size={22} color="#3B82F6" />}
+              </TouchableOpacity>
+
               {states.map(st => (
                 <TouchableOpacity 
                   key={st.id} 
-                  style={[s.sheetItem, filterStateId === st.id && { backgroundColor: st.color + "08", borderColor: st.color + "20" }]} 
+                  style={[s.sheetItem, filterStateId === st.id && { backgroundColor: st.color + "08" }]} 
                   onPress={() => { setFilterStateId(st.id); setStateMenuVisible(false); }}
                 >
                   <View style={[s.sheetItemIcon, { backgroundColor: st.color + "15" }]}>
                     <View style={[s.dotSmall, { backgroundColor: st.color }]} />
                   </View>
-                  <Text style={[s.sheetItemTxt, filterStateId === st.id && { color: st.color, fontWeight: "800" }]}>{st.name}</Text>
-                  {filterStateId === st.id && <Ionicons name="checkmark-circle" size={24} color={st.color} />}
+                  <Text style={[s.sheetItemTxt, filterStateId === st.id && { color: st.color, fontWeight: "700" }]}>
+                    {st.name}
+                  </Text>
+                  {filterStateId === st.id && <Ionicons name="checkmark-circle" size={22} color={st.color} />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <View style={{ height: 40 }} />
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
-  header: { paddingTop: 60, paddingBottom: 0, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
-  headerContent: { paddingHorizontal: 24, marginBottom: 15 },
-  titleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
-  headerTitle: { fontSize: 24, fontWeight: "900", color: "white", letterSpacing: -0.5 },
-  clearBtn: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.25)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 6 },
-  clearBtnTxt: { fontSize: 11, fontWeight: "800", color: "white", textTransform: "uppercase" },
-  searchBar: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 16, paddingHorizontal: 16, height: 48 },
-  searchInput: { flex: 1, color: "white", fontSize: 15, fontWeight: "600", marginLeft: 10 },
+  container: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
   
-  dropdownsBar: { flexDirection: "row", paddingHorizontal: 24, gap: 12, marginBottom: 18 },
-  dropdownTrigger: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)", gap: 8 },
-  dropdownTriggerActive: { backgroundColor: "rgba(255,255,255,0.3)", borderColor: "white" },
-  dropdownTriggerTxt: { fontSize: 13, fontWeight: "700", color: "rgba(255,255,255,0.8)" },
-  dropdownTriggerTxtActive: { color: "white" },
-
-  tabBar: { flexDirection: "row", marginTop: 5 },
-  tabItem: { flex: 1, paddingVertical: 16, alignItems: "center", borderBottomWidth: 4, borderBottomColor: "transparent" },
-  tabItemActive: { borderBottomColor: "white" },
-  tabText: { fontSize: 13, fontWeight: "700", color: "rgba(255,255,255,0.6)" },
-  tabTextActive: { color: "white", fontWeight: "900" },
-
-  // Bottom Sheet Styles
-  sheetOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.7)", justifyContent: "flex-end" },
-  sheetContent: { backgroundColor: "white", borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 20 },
-  sheetHandle: { width: 40, height: 6, backgroundColor: "#E2E8F0", borderRadius: 3, alignSelf: "center", marginBottom: 20 },
-  sheetHeaderTitle: { fontSize: 20, fontWeight: "900", color: "#0F172A", marginBottom: 25, textAlign: "center" },
+  // Header
+  header: {
+    paddingTop: 12,
+    paddingBottom: 0,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    shadowColor: "#1E3A8A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "white",
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.8)",
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
   
-  sheetItem: { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 24, borderWidth: 2, borderColor: "#F8FAFC", marginBottom: 12, gap: 16 },
-  sheetItemActive: { backgroundColor: "#F0F7FF", borderColor: "#3B82F630" },
-  sheetItemIcon: { width: 44, height: 44, borderRadius: 14, justifyContent: "center", alignItems: "center" },
-  sheetItemTxt: { flex: 1, fontSize: 16, fontWeight: "700", color: "#64748B" },
-  sheetItemTxtActive: { color: "#3B82F6" },
-  dotSmall: { width: 10, height: 10, borderRadius: 5 },
+  // Search
+  searchWrapper: {
+    paddingHorizontal: 20,
+    gap: 10,
+    marginBottom: 16,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    height: 48,
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: "white",
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  clearChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  clearChipTxt: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FEE2E2",
+  },
+  
+  // Filters
+  filtersRow: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 16,
+  },
+  filterChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 30,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  filterChipActive: {
+    backgroundColor: "rgba(255,255,255,0.3)",
+    borderColor: "rgba(255,255,255,0.5)",
+  },
+  filterChipTxt: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.9)",
+  },
+  filterChipTxtActive: {
+    color: "white",
+  },
+  
+  // Tabs
+  tabBar: {
+    flexDirection: "row",
+    marginTop: 4,
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    gap: 8,
+    position: "relative",
+  },
+  tabItemActive: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  tabIcon: {
+    opacity: 0.8,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.7)",
+  },
+  tabTextActive: {
+    color: "white",
+    fontWeight: "700",
+  },
+  tabIndicator: {
+    position: "absolute",
+    bottom: 0,
+    left: "25%",
+    right: "25%",
+    height: 3,
+    backgroundColor: "white",
+    borderRadius: 2,
+  },
+  
+  // Content
+  content: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+  
+  // Bottom Sheets
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    justifyContent: "flex-end",
+  },
+  sheetContent: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  sheetHandle: {
+    width: 50,
+    height: 5,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 3,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  sheetTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  sheetItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 8,
+    gap: 14,
+  },
+  sheetItemActive: {
+    backgroundColor: "#F0F9FF",
+  },
+  sheetItemIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sheetItemTxt: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  sheetItemTxtActive: {
+    color: "#3B82F6",
+  },
+  dotSmall: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
 });
