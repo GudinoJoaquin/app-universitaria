@@ -19,7 +19,6 @@ export default function FilterChip({ icon, label, isActive, activeColor = "#3B82
 
 const s = StyleSheet.create({
   filterChip: { 
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

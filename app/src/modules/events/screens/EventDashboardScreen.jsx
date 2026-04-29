@@ -20,6 +20,7 @@ import { categoriesService } from "../../gestion/services/categoriesService";
 import { Image } from "expo-image";
 import SearchBar from "../../shared/components/SearchBar";
 import FilterChip from "../../shared/components/FilterChip";
+import ModuleHeader from "../../shared/components/ModuleHeader";
 
 const { height, width } = Dimensions.get("window");
 
@@ -94,6 +95,7 @@ export default function EventDashboardScreen({ navigation }) {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [sortModalVisible, setSortModalVisible] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [participants, setParticipants] = useState([]);
@@ -273,51 +275,45 @@ export default function EventDashboardScreen({ navigation }) {
     <View style={s.container}>
       <StatusBar barStyle="light-content" />
       
-      <LinearGradient 
-        colors={["#0F172A", "#1E293B"]} 
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={s.header}
-      >
-        <View style={s.headerTop}>
-          <View>
-            <Text style={s.headerLogo}>EventHub</Text>
-            <Text style={s.headerSub}>Descubre eventos cerca de ti</Text>
-          </View>
-        </View>
-        
-        <View style={s.tabBar}>
-          {TABS.map((tab, i) => (
-            <TouchableOpacity 
-              key={`tab-${i}`} 
-              style={[s.tabItem, activeTab === i && s.tabItemActive]} 
-              onPress={() => setActiveTab(i)}
-            >
-              <Ionicons 
-                name={getTabIcon(tab)} 
-                size={18} 
-                color={activeTab === i ? "white" : "rgba(255,255,255,0.6)"} 
-                style={{ opacity: 0.8 }}
-              />
-              <Text style={[s.tabTxt, activeTab === i && s.tabTxtActive]}>{tab}</Text>
-              {activeTab === i && <View style={s.tabIndicator} />}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </LinearGradient>
+      <ModuleHeader 
+        title="EventHub"
+        subtitle="Descubre eventos cerca de ti"
+        tabs={TABS}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        getTabIcon={getTabIcon}
+      />
 
       <View style={s.controls}>
         <View style={s.searchRow}>
           <SearchBar 
             value={searchText} 
             onChangeText={setSearchText} 
-            placeholder="Buscar evento..." 
+            placeholder="Buscar eventos o lugares..." 
           />
+          <TouchableOpacity 
+            style={[s.compactSortBtn, sortBy !== "newest" && s.compactSortBtnActive]}
+            onPress={() => setSortModalVisible(true)}
+          >
+            <Ionicons 
+              name={sortBy === "newest" ? "arrow-up" : "arrow-down"} 
+              size={18} 
+              color={sortBy !== "newest" ? "#3B82F6" : "#64748B"} 
+            />
+          </TouchableOpacity>
         </View>
-        <View style={s.filtersRow}>
+        
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={s.filtersScroll}
+          style={s.filtersContainer}
+        >
           <FilterChip 
             icon="options-outline"
-            label={filterStatus === "all" ? "Todos los estados" : filterStatus}
+            label={filterStatus === "all" ? "Estado" : 
+                   filterStatus === "upcoming" ? "Próximos" : 
+                   filterStatus === "ongoing" ? "En curso" : "Pasados"}
             isActive={filterStatus !== "all"}
             onPress={() => setStatusModalVisible(true)}
           />
@@ -327,13 +323,7 @@ export default function EventDashboardScreen({ navigation }) {
             isActive={selectedCategoryIds.length > 0}
             onPress={() => setCategoryModalVisible(true)}
           />
-          <FilterChip 
-            icon="filter-outline"
-            label={sortBy === "newest" ? "Más recientes" : "Más antiguos"}
-            isActive={sortBy !== "newest"}
-            onPress={() => setSortBy(sortBy === "newest" ? "oldest" : "newest")}
-          />
-        </View>
+        </ScrollView>
       </View>
 
       {loading ? (
@@ -428,7 +418,7 @@ export default function EventDashboardScreen({ navigation }) {
           <View style={s.modalSheet}>
             <View style={s.modalHandle} />
             <Text style={s.modalSheetTitle}>Filtrar por estado</Text>
-            {[
+            { [
               { id: "all", label: "Todos los eventos", icon: "apps-outline" },
               { id: "upcoming", label: "Próximos", icon: "calendar-outline" },
               { id: "ongoing", label: "En curso", icon: "play-outline" },
@@ -476,9 +466,31 @@ export default function EventDashboardScreen({ navigation }) {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <TouchableOpacity style={s.applyBtn} onPress={() => setCategoryModalVisible(false)}>
-              <Text style={s.applyBtnTxt}>Aplicar filtros</Text>
-            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Ordenar */}
+      <Modal visible={sortModalVisible} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSortModalVisible(false)} />
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalSheetTitle}>Ordenar por</Text>
+            {[
+              { id: "newest", label: "Más recientes primero", icon: "arrow-down-outline" },
+              { id: "oldest", label: "Más antiguos primero", icon: "arrow-up-outline" }
+            ].map(opt => (
+              <TouchableOpacity 
+                key={opt.id} 
+                style={[s.modalItem, sortBy === opt.id && s.modalItemActive]} 
+                onPress={() => { setSortBy(opt.id); setSortModalVisible(false); }}
+              >
+                <Ionicons name={opt.icon} size={20} color={sortBy === opt.id ? "#3B82F6" : "#94A3B8"} />
+                <Text style={[s.modalItemTxt, sortBy === opt.id && s.modalItemTxtActive]}>{opt.label}</Text>
+                {sortBy === opt.id && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       </Modal>
@@ -491,68 +503,6 @@ const s = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
   loadingText: { fontSize: 14, color: "#94A3B8", fontWeight: "500" },
   
-  header: { 
-    paddingTop: 56, 
-    paddingBottom: 16, 
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-  headerTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  headerLogo: { 
-    fontSize: 28, 
-    fontWeight: "800", 
-    color: "white",
-    letterSpacing: -0.5,
-  },
-  headerSub: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.7)",
-    marginTop: 2,
-  },
-  
-  tabBar: { 
-    flexDirection: "row", 
-    justifyContent: "center",
-    gap: 8,
-  },
-  tabItem: { 
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10, 
-    paddingHorizontal: 16,
-    borderRadius: 30,
-    gap: 8,
-    position: "relative",
-  },
-  tabItemActive: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-  },
-  tabTxt: { 
-    fontSize: 14, 
-    fontWeight: "600", 
-    color: "rgba(255,255,255,0.6)" 
-  },
-  tabTxtActive: { 
-    color: "white",
-    fontWeight: "700",
-  },
-  tabIndicator: {
-    position: "absolute",
-    bottom: 0,
-    left: "30%",
-    right: "30%",
-    height: 2,
-    backgroundColor: "white",
-    borderRadius: 1,
-  },
-  
   controls: { 
     backgroundColor: "white", 
     paddingHorizontal: 16, 
@@ -562,12 +512,33 @@ const s = StyleSheet.create({
   },
   searchRow: { 
     flexDirection: "row", 
-    gap: 10, 
+    alignItems: "center",
+    gap: 12, 
     marginBottom: 12 
   },
-  filtersRow: {
-    flexDirection: "row",
+  filtersContainer: {
+    marginHorizontal: -16, 
+  },
+  filtersScroll: {
+    paddingHorizontal: 16,
     gap: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  compactSortBtn: {
+    width: 46,
+    height: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "white",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  compactSortBtnActive: {
+    backgroundColor: "#F8FAFC",
+    borderColor: "#CBD5E1",
   },
 
   listContent: { 
@@ -577,16 +548,18 @@ const s = StyleSheet.create({
   card: { 
     backgroundColor: "white", 
     borderRadius: 24, 
-    marginBottom: 20, 
+    marginBottom: 24, 
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
     elevation: 4,
   },
   cardImgBox: { 
-    height: 180, 
+    height: 200, 
     position: "relative" 
   },
   cardImg: { 
@@ -594,15 +567,16 @@ const s = StyleSheet.create({
   },
   statusTag: { 
     position: "absolute",
-    top: 12,
-    left: 12,
+    top: 16,
+    left: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
     borderWidth: 1,
+    backgroundColor: "rgba(255,255,255,0.9)",
   },
   statusDot: {
     width: 6,
@@ -684,11 +658,12 @@ const s = StyleSheet.create({
     fontWeight: "800" 
   },
   cardTitle: { 
-    fontSize: 18, 
+    fontSize: 20, 
     fontWeight: "800", 
-    color: "#1E293B", 
-    marginBottom: 10, 
-    lineHeight: 24 
+    color: "#0F172A", 
+    marginBottom: 12, 
+    lineHeight: 28,
+    letterSpacing: -0.5,
   },
   cardMeta: { 
     flexDirection: "row", 
@@ -702,9 +677,9 @@ const s = StyleSheet.create({
     flexShrink: 1,
   },
   metaTxt: { 
-    fontSize: 12, 
+    fontSize: 13, 
     color: "#64748B", 
-    fontWeight: "500",
+    fontWeight: "600",
     flexShrink: 1,
   },
   
@@ -782,15 +757,26 @@ const s = StyleSheet.create({
   },
   modalSheet: { 
     backgroundColor: "white", 
-    borderTopLeftRadius: 28, 
-    borderTopRightRadius: 28, 
+    borderTopLeftRadius: 32, 
+    borderTopRightRadius: 32, 
     padding: 24,
+    paddingTop: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 20,
   },
   modalBox: { 
     backgroundColor: "white", 
-    borderRadius: 24, 
-    padding: 20, 
-    maxHeight: height * 0.8 
+    borderRadius: 32, 
+    padding: 24, 
+    maxHeight: height * 0.8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
   },
   modalHeader: { 
     flexDirection: "row", 
@@ -822,15 +808,13 @@ const s = StyleSheet.create({
     flexDirection: "row", 
     alignItems: "center", 
     gap: 12,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    marginBottom: 6,
   },
   modalItemActive: {
     backgroundColor: "#EFF6FF",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginHorizontal: -12,
   },
   modalItemTxt: { 
     flex: 1,

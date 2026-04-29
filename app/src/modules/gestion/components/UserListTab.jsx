@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, Alert,
-  RefreshControl, ActivityIndicator, StyleSheet, Modal, ScrollView
+  RefreshControl, ActivityIndicator, StyleSheet, Modal, ScrollView,
+  Pressable, Dimensions
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -10,6 +11,8 @@ import FilterChip from "../../shared/components/FilterChip";
 import { getAllUsers, updateUserRole } from "../services/usersService";
 import { assignStateToUser, removeStateFromUser } from "../services/statesService";
 import { useAuth } from "../../auth/context/AuthContext";
+
+const { height } = Dimensions.get("window");
 
 const ROLE_CONFIG = {
   Admin:     { color: "#EF4444", bg: "#FEF2F2", label: "Admin", icon: "shield-checkmark", power: 4 },
@@ -121,15 +124,16 @@ export default function UserListTab({ states }) {
 
   const selectedRoleObj = ROLES_LIST.find(r => r.id === filterRole);
   const selectedStateObj = states?.find(s => s.id === filterStateId);
-
+  
   const renderUser = ({ item }) => {
-    const ri = ROLE_CONFIG[item.role] ?? ROLE_CONFIG.User;
+    const ri = ROLE_CONFIG[item.role] || ROLE_CONFIG.User;
     const isSelf = item.id === currentUser?.id;
     const roleEditable = canEditRole(item);
     const statesEditable = canEditStates(item);
-    
+
     return (
       <View style={[s.userCard, !roleEditable && !statesEditable && s.userCardDisabled]}>
+        {/* Role Badge integrated into the card header area */}
         <View style={s.userRow}>
           <View style={[s.avatar, { backgroundColor: ri.color }]}>
             {item.avatar_url
@@ -137,44 +141,53 @@ export default function UserListTab({ states }) {
               : <Text style={s.avatarTxt}>{item.name?.charAt(0)?.toUpperCase() || "?"}</Text>}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.userName}>{item.name || "—"} {isSelf && "(Tú)"}</Text>
-            <Text style={s.userEmail}>{item.email}</Text>
-            <View style={s.statesRow}>
-              {(item.states ?? []).map(st => (
-                <View key={st.id} style={[s.statePill, { backgroundColor: st.color + "15", borderColor: st.color }]}>
-                  <Text style={[s.statePillTxt, { color: st.color }]}>{st.name}</Text>
-                </View>
-              ))}
+            <View style={s.nameRow}>
+              <Text style={s.userName} numberOfLines={1}>{item.name || "—"}</Text>
+              {isSelf && <View style={s.selfBadge}><Text style={s.selfBadgeTxt}>TÚ</Text></View>}
             </View>
+            <Text style={s.userEmail} numberOfLines={1}>{item.email}</Text>
           </View>
           <View style={[s.roleBadge, { backgroundColor: ri.bg }]}>
-            <Ionicons name={ri.icon} size={10} color={ri.color} style={{ marginRight: 4 }} />
+            <Ionicons name={ri.icon} size={12} color={ri.color} style={{ marginRight: 4 }} />
             <Text style={[s.roleBadgeTxt, { color: ri.color }]}>{ri.label}</Text>
           </View>
+        </View>
+
+        <View style={s.statesRow}>
+          {(item.states ?? []).length > 0 ? (
+            (item.states ?? []).map(st => (
+              <View key={st.id} style={[s.statePill, { backgroundColor: st.color + "10", borderColor: st.color + "30" }]}>
+                <View style={[s.dotSmall, { backgroundColor: st.color, marginRight: 6 }]} />
+                <Text style={[s.statePillTxt, { color: st.color }]}>{st.name}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={s.noStatesTxt}>Sin estados asignados</Text>
+          )}
         </View>
         
         <View style={s.actionRow}>
           {roleEditable ? (
             <TouchableOpacity style={s.actionBtn} onPress={() => { setSelectedUser(item); setRoleModalVisible(true); }}>
-              <Ionicons name="swap-horizontal" size={14} color="#6366F1" />
-              <Text style={[s.actionTxt, { color: "#6366F1" }]}>Rol</Text>
+              <Ionicons name="swap-horizontal" size={16} color="#6366F1" />
+              <Text style={[s.actionTxt, { color: "#6366F1" }]}>Cambiar Rol</Text>
             </TouchableOpacity>
           ) : (
             <View style={[s.actionBtn, s.actionBtnDisabled]}>
-              <Ionicons name="lock-closed-outline" size={12} color="#94A3B8" />
+              <Ionicons name="lock-closed-outline" size={14} color="#94A3B8" />
               <Text style={s.actionTxtDisabled}>Rol bloqueado</Text>
             </View>
           )}
 
           {statesEditable ? (
             <TouchableOpacity style={s.actionBtn} onPress={() => { setSelectedUser(item); setStatesModalVisible(true); }}>
-              <Ionicons name="layers" size={14} color="#F59E0B" />
+              <Ionicons name="layers-outline" size={16} color="#F59E0B" />
               <Text style={[s.actionTxt, { color: "#F59E0B" }]}>Estados</Text>
             </TouchableOpacity>
           ) : (
             <View style={[s.actionBtn, s.actionBtnDisabled]}>
-              <Ionicons name="lock-closed-outline" size={12} color="#94A3B8" />
-              <Text style={s.actionTxtDisabled}>Estados bloqueados</Text>
+              <Ionicons name="lock-closed-outline" size={14} color="#94A3B8" />
+              <Text style={s.actionTxtDisabled}>Solo lectura</Text>
             </View>
           )}
         </View>
@@ -190,28 +203,26 @@ export default function UserListTab({ states }) {
           onChangeText={setSearchText} 
           placeholder="Buscar usuario..." 
         />
-        {(filterRole || filterStateId) && (
-          <TouchableOpacity onPress={() => { setFilterRole(null); setFilterStateId(null); }} style={s.clearBtn}>
-            <Ionicons name="refresh-outline" size={20} color="#EF4444" />
-          </TouchableOpacity>
-        )}
       </View>
       
       <View style={s.filtersRow}>
         <FilterChip 
-          icon="people-outline"
+          icon="shield-checkmark-outline"
           label={selectedRoleObj ? selectedRoleObj.label : "Rol"}
           isActive={!!filterRole}
-          activeColor="#3B82F6"
           onPress={() => setFilterRoleMenuVisible(true)}
         />
         <FilterChip 
-          icon="pricetags-outline"
+          icon="layers-outline"
           label={selectedStateObj ? selectedStateObj.name : "Estado"}
           isActive={!!filterStateId}
-          activeColor="#F59E0B"
           onPress={() => setFilterStateMenuVisible(true)}
         />
+        {(filterRole || filterStateId) && (
+          <TouchableOpacity onPress={() => { setFilterRole(null); setFilterStateId(null); }} style={s.clearBtnSmall}>
+            <Ionicons name="close-circle" size={20} color="#EF4444" />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -231,26 +242,30 @@ export default function UserListTab({ states }) {
       />
 
       {/* Filter Role Menu */}
-      <Modal visible={filterRoleMenuVisible} transparent animationType="slide" onRequestClose={() => setFilterRoleMenuVisible(false)}>
+      <Modal visible={filterRoleMenuVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setFilterRoleMenuVisible(false)} />
-          <View style={[s.modalBox, s.bottomSheet]}>
-            <View style={s.sheetHandle} />
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Filtrar por Rol</Text>
-              <TouchableOpacity onPress={() => setFilterRoleMenuVisible(false)}><Ionicons name="close" size={24} color="#374151" /></TouchableOpacity>
-            </View>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setFilterRoleMenuVisible(false)} />
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalSheetTitle}>Filtrar por rol</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <TouchableOpacity style={[s.sheetItem, !filterRole && s.sheetItemActive]} onPress={() => { setFilterRole(null); setFilterRoleMenuVisible(false); }}>
-                <View style={[s.sheetItemIcon, { backgroundColor: "#F1F5F9" }]}><Ionicons name="apps" size={20} color="#64748B" /></View>
-                <Text style={[s.sheetItemTxt, !filterRole && s.sheetItemTxtActive]}>Todos los roles</Text>
-                {!filterRole && <Ionicons name="checkmark-circle" size={22} color="#3B82F6" />}
+              <TouchableOpacity 
+                style={[s.modalItem, !filterRole && s.modalItemActive]} 
+                onPress={() => { setFilterRole(null); setFilterRoleMenuVisible(false); }}
+              >
+                <Ionicons name="apps-outline" size={20} color={!filterRole ? "#3B82F6" : "#94A3B8"} />
+                <Text style={[s.modalItemTxt, !filterRole && s.modalItemTxtActive]}>Todos los roles</Text>
+                {!filterRole && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
               </TouchableOpacity>
               {ROLES_LIST.map(r => (
-                <TouchableOpacity key={r.id} style={[s.sheetItem, filterRole === r.id && { backgroundColor: r.color + "08" }]} onPress={() => { setFilterRole(r.id); setFilterRoleMenuVisible(false); }}>
-                  <View style={[s.sheetItemIcon, { backgroundColor: r.color + "15" }]}><Ionicons name={r.icon} size={20} color={r.color} /></View>
-                  <Text style={[s.sheetItemTxt, filterRole === r.id && { color: r.color, fontWeight: "700" }]}>{r.label}</Text>
-                  {filterRole === r.id && <Ionicons name="checkmark-circle" size={22} color={r.color} />}
+                <TouchableOpacity 
+                  key={r.id} 
+                  style={[s.modalItem, filterRole === r.id && s.modalItemActive]} 
+                  onPress={() => { setFilterRole(r.id); setFilterRoleMenuVisible(false); }}
+                >
+                  <Ionicons name={r.icon} size={20} color={filterRole === r.id ? "#3B82F6" : "#94A3B8"} />
+                  <Text style={[s.modalItemTxt, filterRole === r.id && s.modalItemTxtActive]}>{r.label}</Text>
+                  {filterRole === r.id && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -259,26 +274,30 @@ export default function UserListTab({ states }) {
       </Modal>
 
       {/* Filter State Menu */}
-      <Modal visible={filterStateMenuVisible} transparent animationType="slide" onRequestClose={() => setFilterStateMenuVisible(false)}>
+      <Modal visible={filterStateMenuVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setFilterStateMenuVisible(false)} />
-          <View style={[s.modalBox, s.bottomSheet, { maxHeight: "70%" }]}>
-            <View style={s.sheetHandle} />
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Filtrar por Estado</Text>
-              <TouchableOpacity onPress={() => setFilterStateMenuVisible(false)}><Ionicons name="close" size={24} color="#374151" /></TouchableOpacity>
-            </View>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setFilterStateMenuVisible(false)} />
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalSheetTitle}>Filtrar por estado</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <TouchableOpacity style={[s.sheetItem, !filterStateId && s.sheetItemActive]} onPress={() => { setFilterStateId(null); setFilterStateMenuVisible(false); }}>
-                <View style={[s.sheetItemIcon, { backgroundColor: "#F1F5F9" }]}><Ionicons name="layers" size={20} color="#64748B" /></View>
-                <Text style={[s.sheetItemTxt, !filterStateId && s.sheetItemTxtActive]}>Todos los estados</Text>
-                {!filterStateId && <Ionicons name="checkmark-circle" size={22} color="#3B82F6" />}
+              <TouchableOpacity 
+                style={[s.modalItem, !filterStateId && s.modalItemActive]} 
+                onPress={() => { setFilterStateId(null); setFilterStateMenuVisible(false); }}
+              >
+                <Ionicons name="apps-outline" size={20} color={!filterStateId ? "#3B82F6" : "#94A3B8"} />
+                <Text style={[s.modalItemTxt, !filterStateId && s.modalItemTxtActive]}>Todos los estados</Text>
+                {!filterStateId && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
               </TouchableOpacity>
               {(states || []).map(st => (
-                <TouchableOpacity key={st.id} style={[s.sheetItem, filterStateId === st.id && { backgroundColor: st.color + "08" }]} onPress={() => { setFilterStateId(st.id); setFilterStateMenuVisible(false); }}>
-                  <View style={[s.sheetItemIcon, { backgroundColor: st.color + "15" }]}><View style={[s.dotSmall, { backgroundColor: st.color }]} /></View>
-                  <Text style={[s.sheetItemTxt, filterStateId === st.id && { color: st.color, fontWeight: "700" }]}>{st.name}</Text>
-                  {filterStateId === st.id && <Ionicons name="checkmark-circle" size={22} color={st.color} />}
+                <TouchableOpacity 
+                  key={st.id} 
+                  style={[s.modalItem, filterStateId === st.id && s.modalItemActive]} 
+                  onPress={() => { setFilterStateId(st.id); setFilterStateMenuVisible(false); }}
+                >
+                  <View style={[s.dotSmall, { backgroundColor: st.color, marginRight: 4 }]} />
+                  <Text style={[s.modalItemTxt, filterStateId === st.id && s.modalItemTxtActive]}>{st.name}</Text>
+                  {filterStateId === st.id && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -287,19 +306,15 @@ export default function UserListTab({ states }) {
       </Modal>
 
       {/* Modal Cambio de Rol */}
-      <Modal visible={roleModalVisible} transparent animationType="slide" onRequestClose={() => setRoleModalVisible(false)}>
+      <Modal visible={roleModalVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
-          <View style={[s.modalBox, s.bottomSheet]}>
-            <View style={s.sheetHandle} />
-            <View style={s.modalHeader}>
-              <View>
-                <Text style={s.modalTitle}>Cambiar Rol</Text>
-                <Text style={s.modalSub}>{selectedUser?.name}</Text>
-              </View>
-              <TouchableOpacity onPress={() => setRoleModalVisible(false)}><Ionicons name="close" size={24} color="#374151" /></TouchableOpacity>
-            </View>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setRoleModalVisible(false)} />
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalSheetTitle}>Cambiar rol</Text>
+            <Text style={s.modalSub}>{selectedUser?.name}</Text>
             
-            <View style={s.rolesGrid}>
+            <View style={s.rolesListCompact}>
               {Object.keys(ROLE_CONFIG)
                 .filter(r => {
                   if (currentUser?.role === 'Admin') return r !== 'Admin';
@@ -312,60 +327,55 @@ export default function UserListTab({ states }) {
                   return (
                     <TouchableOpacity 
                       key={roleKey} 
-                      style={[s.roleCard, { backgroundColor: config.bg, borderColor: config.color + "30" }]}
+                      style={s.compactActionRow}
                       onPress={() => handleUpdateRole(roleKey)}
                     >
-                      <View style={[s.roleIconCircle, { backgroundColor: config.color }]}>
-                        <Ionicons name={config.icon} size={24} color="white" />
+                      <View style={[s.compactIcon, { backgroundColor: config.color + "15" }]}>
+                        <Ionicons name={config.icon} size={16} color={config.color} />
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.roleCardLabel, { color: config.color }]}>{config.label}</Text>
-                        <Text style={s.roleCardDesc}>Asignar permisos de {config.label.toLowerCase()}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={20} color={config.color} />
+                      <Text style={[s.compactLabel, { color: "#1E293B" }]}>{config.label}</Text>
+                      <Ionicons name="chevron-forward" size={14} color="#CBD5E1" />
                     </TouchableOpacity>
                   );
                 })}
             </View>
-            <View style={{ height: 40 }} />
+            <View style={{ height: 20 }} />
           </View>
         </View>
       </Modal>
 
       {/* Modal Estados */}
-      <Modal visible={statesModalVisible} transparent animationType="slide" onRequestClose={() => setStatesModalVisible(false)}>
+      <Modal visible={statesModalVisible} transparent animationType="fade">
         <View style={s.modalOverlay}>
-          <View style={[s.modalBox, s.bottomSheet]}>
-            <View style={s.sheetHandle} />
-            <View style={s.modalHeader}>
-              <View>
-                <Text style={s.modalTitle}>Gestionar Estados</Text>
-                <Text style={s.modalSub}>{selectedUser?.name}</Text>
-              </View>
-              <TouchableOpacity onPress={() => setStatesModalVisible(false)}><Ionicons name="close" size={24} color="#374151" /></TouchableOpacity>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setStatesModalVisible(false)} />
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalSheetTitle}>Gestionar estados</Text>
+            <Text style={s.modalSub}>{selectedUser?.name}</Text>
+            
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: height * 0.4 }}>
               {(states || []).map(state => {
                 const has = selectedUser?.states?.some(s => s.id === state.id);
                 return (
                   <TouchableOpacity 
                     key={state.id} 
-                    style={[s.stateRow, has && { backgroundColor: state.color + "10", borderColor: state.color + "30" }]} 
+                    style={[s.compactActionRow, has && { backgroundColor: "#F8FAFC" }]} 
                     onPress={() => handleToggleState(state)}
                   >
-                    <View style={[s.stateDot, { backgroundColor: state.color }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.stateName, has && { color: state.color }]}>{state.name}</Text>
-                    </View>
-                    <Ionicons name={has ? "checkmark-circle" : "ellipse-outline"} size={22} color={has ? state.color : "#D1D5DB"} />
+                    <View style={[s.dotSmall, { backgroundColor: state.color, marginRight: 4 }]} />
+                    <Text style={[s.compactLabel, has && { color: state.color, fontWeight: "700" }]}>{state.name}</Text>
+                    <Ionicons 
+                      name={has ? "checkbox" : "square-outline"} 
+                      size={18} 
+                      color={has ? state.color : "#CBD5E1"} 
+                    />
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
             <TouchableOpacity style={s.doneBtn} onPress={() => setStatesModalVisible(false)}>
-              <Text style={s.doneBtnTxt}>Guardar Cambios</Text>
+              <Text style={s.doneBtnTxt}>Guardar cambios</Text>
             </TouchableOpacity>
-            <View style={{ height: 20 }} />
           </View>
         </View>
       </Modal>
@@ -374,81 +384,181 @@ export default function UserListTab({ states }) {
 }
 
 const s = StyleSheet.create({
-  list: { padding: 16, paddingBottom: 120 },
+  list: { padding: 16, paddingBottom: 100 },
   
-  // Controls Header
   controls: { 
+    backgroundColor: "white", 
+    paddingHorizontal: 14, 
+    paddingVertical: 10,
+    borderRadius: 18,
     marginBottom: 16,
-    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
   },
   searchRow: { 
     flexDirection: "row", 
-    gap: 10, 
-    marginBottom: 12 
-  },
-  clearBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    justifyContent: "center",
     alignItems: "center",
+    gap: 8, 
+    marginBottom: 10 
   },
   filtersRow: { 
     flexDirection: "row", 
-    gap: 10 
+    alignItems: "center",
+    gap: 6,
+  },
+  clearBtnSmall: {
+    padding: 4,
   },
 
   // User Card
-  userCard: { backgroundColor: "white", borderRadius: 28, marginBottom: 18, padding: 18, elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
-  userCardDisabled: { opacity: 0.9 },
-  userRow: { flexDirection: "row", alignItems: "center", marginBottom: 18 },
-  avatar: { width: 56, height: 56, borderRadius: 24, justifyContent: "center", alignItems: "center", marginRight: 15, overflow: "hidden" },
-  avatarTxt: { color: "white", fontSize: 22, fontWeight: "900" },
-  userName: { fontSize: 17, fontWeight: "900", color: "#1E293B" },
-  userEmail: { fontSize: 13, color: "#64748B", marginTop: 1 },
-  statesRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  statePill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, borderWidth: 1 },
-  statePillTxt: { fontSize: 11, fontWeight: "800" },
-  roleBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, position: "absolute", top: -10, right: -5, elevation: 5, shadowColor: "#000", shadowOpacity: 0.1 },
-  roleBadgeTxt: { fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  actionRow: { flexDirection: "row", gap: 14, borderTopWidth: 1.5, borderTopColor: "#F1F5F9", paddingTop: 18 },
-  actionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, backgroundColor: "#F8FAFC", borderRadius: 18, borderWidth: 1, borderColor: "#F1F5F9" },
-  actionBtnDisabled: { backgroundColor: "#F1F5F9", opacity: 0.6 },
-  actionTxt: { fontSize: 13, fontWeight: "800", color: "#334155" },
-  actionTxtDisabled: { fontSize: 12, fontWeight: "700", color: "#94A3B8" },
+  userCard: { 
+    backgroundColor: "white", 
+    borderRadius: 22, 
+    marginBottom: 14, 
+    padding: 14, 
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    shadowColor: "#0F172A", 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.04, 
+    shadowRadius: 8, 
+    elevation: 2 
+  },
+  userCardDisabled: { opacity: 0.8 },
+  userRow: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
+  avatar: { width: 48, height: 48, borderRadius: 14, justifyContent: "center", alignItems: "center", marginRight: 12, overflow: "hidden" },
+  avatarTxt: { color: "white", fontSize: 18, fontWeight: "800" },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  userName: { fontSize: 15, fontWeight: "800", color: "#1E293B", flexShrink: 1 },
+  selfBadge: { backgroundColor: "#F1F5F9", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
+  selfBadgeTxt: { fontSize: 8, fontWeight: "800", color: "#64748B" },
+  userEmail: { fontSize: 12, color: "#94A3B8", marginTop: 1 },
+  
+  statesRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginBottom: 14 },
+  statePill: { 
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8, 
+    paddingVertical: 3, 
+    borderRadius: 8, 
+    borderWidth: 1 
+  },
+  statePillTxt: { fontSize: 10, fontWeight: "700" },
+  noStatesTxt: { fontSize: 11, color: "#CBD5E1", fontStyle: "italic" },
+  
+  roleBadge: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingHorizontal: 8, 
+    paddingVertical: 4, 
+    borderRadius: 8,
+  },
+  roleBadgeTxt: { fontSize: 10, fontWeight: "800", textTransform: "capitalize" },
+  
+  actionRow: { 
+    flexDirection: "row", 
+    gap: 8, 
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#F8FAFC",
+  },
+  actionBtn: { 
+    flex: 1, 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    gap: 5, 
+    paddingVertical: 10, 
+    backgroundColor: "#F8FAFC", 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: "#F1F5F9" 
+  },
+  actionBtnDisabled: { backgroundColor: "#F1F5F9", borderColor: "transparent" },
+  actionTxt: { fontSize: 12, fontWeight: "700" },
+  actionTxtDisabled: { fontSize: 11, fontWeight: "600", color: "#94A3B8" },
 
-  emptyContainer: { alignItems: "center", marginTop: 80 },
-  empty: { textAlign: "center", marginTop: 15, color: "#94A3B8", fontSize: 15, fontWeight: "600" },
+  emptyContainer: { alignItems: "center", marginTop: 80, gap: 10 },
+  empty: { textAlign: "center", color: "#94A3B8", fontSize: 14, fontWeight: "500" },
   
-  // Modals
-  modalOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.6)", justifyContent: "flex-end" },
-  modalBox: { backgroundColor: "white", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, maxHeight: "80%" },
-  sheetHandle: { width: 40, height: 5, backgroundColor: "#E2E8F0", borderRadius: 3, alignSelf: "center", marginBottom: 20 },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 },
-  modalTitle: { fontSize: 24, fontWeight: "900", color: "#0F172A" },
-  modalSub: { fontSize: 14, color: "#64748B", marginTop: 4, fontWeight: "600" },
-  closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#F8FAFC", justifyContent: "center", alignItems: "center" },
+  // Modals Premium
+  modalOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.4)", justifyContent: "flex-end" },
+  modalSheet: { 
+    backgroundColor: "white", 
+    borderTopLeftRadius: 28, 
+    borderTopRightRadius: 28, 
+    padding: 20, 
+    paddingTop: 12,
+  },
+  modalHandle: { 
+    width: 36, 
+    height: 4, 
+    backgroundColor: "#E2E8F0", 
+    borderRadius: 2, 
+    alignSelf: "center", 
+    marginBottom: 16 
+  },
+  modalSheetTitle: { 
+    fontSize: 16, 
+    fontWeight: "800", 
+    color: "#1E293B", 
+    marginBottom: 14 
+  },
+  modalItem: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 2,
+  },
+  modalItemActive: {
+    backgroundColor: "#F8FAFC",
+  },
+  modalItemTxt: { 
+    flex: 1,
+    fontSize: 13, 
+    fontWeight: "500", 
+    color: "#64748B" 
+  },
+  modalItemTxtActive: { 
+    color: "#3B82F6",
+    fontWeight: "600",
+  },
+  modalSub: { fontSize: 12, color: "#94A3B8", marginTop: -10, marginBottom: 14, fontWeight: "500" },
   
-  sheetItem: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 16, marginBottom: 8, gap: 14 },
-  sheetItemActive: { backgroundColor: "#F0F9FF" },
-  sheetItemIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: "center", alignItems: "center" },
-  sheetItemTxt: { flex: 1, fontSize: 15, fontWeight: "600", color: "#334155" },
-  sheetItemTxtActive: { color: "#3B82F6" },
-  dotSmall: { width: 12, height: 12, borderRadius: 6 },
+  dotSmall: { width: 6, height: 6, borderRadius: 3 },
 
-  rolesGrid: { gap: 14 },
-  roleCard: { flexDirection: "row", alignItems: "center", padding: 20, borderRadius: 26, borderWidth: 2, gap: 18 },
-  roleIconCircle: { width: 56, height: 56, borderRadius: 22, justifyContent: "center", alignItems: "center", elevation: 5 },
-  roleCardLabel: { fontSize: 19, fontWeight: "900" },
-  roleCardDesc: { fontSize: 13, color: "#64748B", marginTop: 3, fontWeight: "500" },
+  rolesListCompact: { gap: 2 },
+  compactActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    gap: 12,
+  },
+  compactIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  compactLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#475569",
+  },
   
-  stateRow: { flexDirection: "row", alignItems: "center", padding: 18, borderRadius: 22, borderWidth: 2, borderColor: "#F1F5F9", marginBottom: 12 },
-  stateDot: { width: 14, height: 14, borderRadius: 7, marginRight: 18 },
-  stateName: { fontSize: 17, fontWeight: "800", color: "#334155" },
-  
-  doneBtn: { backgroundColor: "#0F172A", paddingVertical: 20, borderRadius: 22, alignItems: "center", marginTop: 20, elevation: 10 },
-  doneBtnTxt: { color: "white", fontSize: 17, fontWeight: "900" },
+  doneBtn: { 
+    backgroundColor: "#0F172A", 
+    paddingVertical: 12, 
+    borderRadius: 12, 
+    alignItems: "center", 
+    marginTop: 10,
+  },
+  doneBtnTxt: { color: "white", fontSize: 13, fontWeight: "800" },
 });
