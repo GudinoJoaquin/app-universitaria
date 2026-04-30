@@ -7,12 +7,9 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { useAuth } from "../modules/auth/context/AuthContext";
 
-// Auth screens
 import LoginScreen from "../modules/auth/screens/LoginScreen";
 import RegisterScreen from "../modules/auth/screens/RegisterScreen";
 import FirstTimeSetupScreen from "../modules/auth/screens/FirstTimeSetupScreen";
-
-// Main screens
 import EventDashboardScreen from "../modules/events/screens/EventDashboardScreen"; 
 import ProfileScreen from "../modules/profile/screens/ProfileScreen";
 import GestionScreen from "../modules/gestion/screens/GestionScreen"; 
@@ -20,8 +17,6 @@ import AdminCategoriesScreen from "../modules/gestion/screens/AdminCategoriesScr
 import SystemConfigScreen from "../modules/gestion/screens/SystemConfigScreen";
 import UserManagementScreen from "../modules/gestion/screens/UserManagementScreen";
 import AdminStatesScreen from "../modules/gestion/screens/AdminStatesScreen";
-
-// Event detail & create
 import EventDetailsScreen from "../modules/events/screens/EventDetailScreen";
 import EventCreateScreen from "../modules/events/screens/EventCreateScreen";
 
@@ -29,11 +24,8 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs() {
-  const { user, isAdmin, isHelper } = useAuth();
-  
-  // Only Admin and Helper can see the "Gestión" tab (User Management)
+  const { isAdmin, isHelper } = useAuth();
   const canManageUsers = isAdmin() || isHelper();
-
   return (
     <Tab.Navigator
       screenOptions={{
@@ -62,7 +54,6 @@ function MainTabs() {
           ),
         }}
       />
-
       {canManageUsers && (
         <Tab.Screen
           name="ManagementTab"
@@ -75,7 +66,6 @@ function MainTabs() {
           }}
         />
       )}
-
       <Tab.Screen
         name="ProfileTab"
         component={ProfileScreen}
@@ -90,59 +80,49 @@ function MainTabs() {
   );
 }
 
+const linkingConfig = {
+  prefixes: [Linking.createURL("/")],
+  config: {
+    screens: {
+      Login: "login",
+      Register: "register",
+      MainTabs: {
+        screens: {
+          EventsTab: "events",
+          ManagementTab: "management",
+          ProfileTab: "profile",
+        },
+      },
+      UserManagement: "users",
+      SystemConfig: "config",
+    },
+  },
+};
+
 export default function AppNavigator() {
   const { user } = useAuth();
 
-  const linking = {
-    prefixes: [Linking.createURL("/")],
-    config: {
-      screens: {
-        Login: "login",
-        Register: "register",
-        MainTabs: {
-          screens: {
-            EventsTab: "events",
-            ManagementTab: "management",
-            ProfileTab: "profile",
-          },
-        },
-        UserManagement: "users",
-        SystemConfig: "config",
-      },
-    },
-  };
-
   return (
-    <NavigationContainer linking={linking}>
+    <NavigationContainer linking={linkingConfig}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
-          <>
+          <Stack.Group>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
-          </>
+          </Stack.Group>
         ) : (
-          <>
+          <Stack.Group>
             <Stack.Screen name="MainTabs" component={MainTabs} />
-            
-            {/* Event detail & Create - Stacked above tabs for clean focus */}
-            <Stack.Screen 
-              name="EventDetails" 
-              component={EventDetailsScreen} 
-              options={{ headerShown: false }} 
-            />
-            <Stack.Screen name="CreateEvent" component={EventCreateScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="AdminCategories" component={AdminCategoriesScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="UserManagement" component={UserManagementScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="SystemConfig" component={SystemConfigScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="AdminStates" component={AdminStatesScreen} options={{ headerShown: false }} />
-            
-            {/* Legacy Fallback if needed */}
             <Stack.Screen name="FirstTimeSetup" component={FirstTimeSetupScreen} />
-          </>
+            <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
+            <Stack.Screen name="CreateEvent" component={EventCreateScreen} />
+            <Stack.Screen name="AdminCategories" component={AdminCategoriesScreen} />
+            <Stack.Screen name="UserManagement" component={UserManagementScreen} />
+            <Stack.Screen name="SystemConfig" component={SystemConfigScreen} />
+            <Stack.Screen name="AdminStates" component={AdminStatesScreen} />
+          </Stack.Group>
         )}
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
-
-

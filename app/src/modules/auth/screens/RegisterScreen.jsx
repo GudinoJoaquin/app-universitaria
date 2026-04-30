@@ -82,6 +82,8 @@ export default function RegisterScreen({ navigation }) {
             "Tu cuenta ha sido creada. Ya puedes iniciar sesión.",
             [{ text: "OK", onPress: () => navigation.navigate("Login") }]
           );
+        } else {
+          navigation.navigate("FirstTimeSetup");
         }
       } else {
         Alert.alert("Error", result.message || "Error en el registro");

@@ -276,7 +276,7 @@ export default function EventDashboardScreen({ navigation }) {
       <StatusBar barStyle="light-content" />
       
       <ModuleHeader 
-        title="EventHub"
+        title="Eventos"
         subtitle="Descubre eventos cerca de ti"
         tabs={TABS}
         activeTab={activeTab}

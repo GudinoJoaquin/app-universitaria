@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { Text, View, Platform } from "react-native";
 import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { eventsService } from "../../events/services/eventsService";
 import { useAuth } from "../../auth/context/AuthContext";
 
 const isExpoGo = Constants.executionEnvironment === "storeClient";
+const Notifications = !isExpoGo ? require("expo-notifications") : null;
 
-if (!isExpoGo) {
+if (Notifications) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -49,10 +49,10 @@ async function registerForPushNotificationsAsync() {
   }
 
   try {
-    if (Platform.OS === "android") {
+    if (Platform.OS === "android" && Notifications) {
       await Notifications.setNotificationChannelAsync("default", {
         name: "default",
-        importance: Notifications.AndroidImportance.MAX,
+        importance: Notifications.AndroidImportance?.MAX ?? 3,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: "#FF231F7C",
       });
@@ -92,12 +92,12 @@ async function registerForPushNotificationsAsync() {
   }
 }
 
-async function scheduleEventNotifications() {
-  if (isExpoGo) return;
+async function scheduleEventNotifications(scheduledNotificationsRef) {
+  if (isExpoGo || !Notifications) return;
   try {
     // Cancelar notificaciones programadas anteriores
     await Notifications.cancelAllScheduledNotificationsAsync();
-    scheduledNotifications.current.clear();
+    scheduledNotificationsRef.current.clear();
 
     // Obtener eventos
     const { success, events } = await eventsService.getEvents();
@@ -140,7 +140,7 @@ async function scheduleEventNotifications() {
         trigger: { date: notificationTime },
       });
 
-      scheduledNotifications.current.add(event.id);
+      scheduledNotificationsRef.current.add(event.id);
     }
   } catch (error) {
     console.log("Error programando notificaciones:", error);
@@ -160,7 +160,7 @@ export default function Notification() {
 
   useEffect(() => {
     if (expoPushToken && user) {
-      scheduleEventNotifications();
+      scheduleEventNotifications(scheduledNotifications);
     }
   }, [expoPushToken, user]);
 

@@ -15,10 +15,10 @@ import { useAuth } from "../../auth/context/AuthContext";
 const { height } = Dimensions.get("window");
 
 const ROLE_CONFIG = {
-  Admin:     { color: "#EF4444", bg: "#FEF2F2", label: "Admin", icon: "shield-checkmark", power: 4 },
-  Helper:    { color: "#8B5CF6", bg: "#F5F3FF", label: "Helper", icon: "briefcase", power: 3 },
+  Admin: { color: "#EF4444", bg: "#FEF2F2", label: "Admin", icon: "shield-checkmark", power: 4 },
+  Helper: { color: "#8B5CF6", bg: "#F5F3FF", label: "Helper", icon: "briefcase", power: 3 },
   Organizer: { color: "#F59E0B", bg: "#FFFBEB", label: "Organizador", icon: "calendar", power: 2 },
-  User:      { color: "#3B82F6", bg: "#EFF6FF", label: "Usuario", icon: "person", power: 1 },
+  User: { color: "#3B82F6", bg: "#EFF6FF", label: "Usuario", icon: "person", power: 1 },
 };
 
 const ROLES_LIST = [
@@ -33,12 +33,12 @@ export default function UserListTab({ states }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Search and Filter State
   const [searchText, setSearchText] = useState("");
   const [filterRole, setFilterRole] = useState(null);
   const [filterStateId, setFilterStateId] = useState(null);
-  
+
   // Filter Menus
   const [filterRoleMenuVisible, setFilterRoleMenuVisible] = useState(false);
   const [filterStateMenuVisible, setFilterStateMenuVisible] = useState(false);
@@ -47,6 +47,8 @@ export default function UserListTab({ states }) {
   const [selectedUser, setSelectedUser] = useState(null);
   const [statesModalVisible, setStatesModalVisible] = useState(false);
   const [roleModalVisible, setRoleModalVisible] = useState(false);
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [pendingRole, setPendingRole] = useState(null);
 
   const canEditRole = (target) => {
     if (!target || !currentUser) return false;
@@ -83,25 +85,25 @@ export default function UserListTab({ states }) {
         if (u.id !== currentUser.id) return false;
       }
 
-      const matchSearch = 
+      const matchSearch =
         u.name?.toLowerCase().includes(searchText?.toLowerCase() || "") ||
         u.email?.toLowerCase().includes(searchText?.toLowerCase() || "");
-      
+
       const matchRole = !filterRole || u.role === filterRole;
       const matchState = !filterStateId || u.states?.some(s => s.id === filterStateId);
-      
+
       return matchSearch && matchRole && matchState;
     });
   }, [users, searchText, filterRole, filterStateId, currentUser]);
 
-  const handleUpdateRole = async (newRole) => {
-    if (!selectedUser) return;
-    setRoleModalVisible(false);
-    
-    const res = await updateUserRole(selectedUser.id, newRole);
+  const handleUpdateRole = async () => {
+    if (!selectedUser || !pendingRole) return;
+    setConfirmModalVisible(false);
+
+    const res = await updateUserRole(selectedUser.id, pendingRole);
     if (res.success) {
-      Alert.alert("Éxito", "Rol actualizado correctamente");
       loadData();
+      setPendingRole(null);
     } else {
       Alert.alert("Acceso Denegado", res.error);
     }
@@ -113,18 +115,18 @@ export default function UserListTab({ states }) {
     const fn = has ? removeStateFromUser : assignStateToUser;
     const res = await fn(selectedUser.id, state.id);
     if (!res.success) { Alert.alert("Error", res.error); return; }
-    
+
     const newStates = has
       ? selectedUser.states.filter(s => s.id !== state.id)
       : [...(selectedUser.states ?? []), state];
-    
+
     setSelectedUser(p => ({ ...p, states: newStates }));
     setUsers(p => p.map(u => u.id === selectedUser.id ? { ...u, states: newStates } : u));
   };
 
   const selectedRoleObj = ROLES_LIST.find(r => r.id === filterRole);
   const selectedStateObj = states?.find(s => s.id === filterStateId);
-  
+
   const renderUser = ({ item }) => {
     const ri = ROLE_CONFIG[item.role] || ROLE_CONFIG.User;
     const isSelf = item.id === currentUser?.id;
@@ -165,7 +167,7 @@ export default function UserListTab({ states }) {
             <Text style={s.noStatesTxt}>Sin estados asignados</Text>
           )}
         </View>
-        
+
         <View style={s.actionRow}>
           {roleEditable ? (
             <TouchableOpacity style={s.actionBtn} onPress={() => { setSelectedUser(item); setRoleModalVisible(true); }}>
@@ -198,21 +200,21 @@ export default function UserListTab({ states }) {
   const renderHeader = () => (
     <View style={s.controls}>
       <View style={s.searchRow}>
-        <SearchBar 
-          value={searchText} 
-          onChangeText={setSearchText} 
-          placeholder="Buscar usuario..." 
+        <SearchBar
+          value={searchText}
+          onChangeText={setSearchText}
+          placeholder="Buscar usuario..."
         />
       </View>
-      
+
       <View style={s.filtersRow}>
-        <FilterChip 
+        <FilterChip
           icon="shield-checkmark-outline"
           label={selectedRoleObj ? selectedRoleObj.label : "Rol"}
           isActive={!!filterRole}
           onPress={() => setFilterRoleMenuVisible(true)}
         />
-        <FilterChip 
+        <FilterChip
           icon="layers-outline"
           label={selectedStateObj ? selectedStateObj.name : "Estado"}
           isActive={!!filterStateId}
@@ -249,8 +251,8 @@ export default function UserListTab({ states }) {
             <View style={s.modalHandle} />
             <Text style={s.modalSheetTitle}>Filtrar por rol</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <TouchableOpacity 
-                style={[s.modalItem, !filterRole && s.modalItemActive]} 
+              <TouchableOpacity
+                style={[s.modalItem, !filterRole && s.modalItemActive]}
                 onPress={() => { setFilterRole(null); setFilterRoleMenuVisible(false); }}
               >
                 <Ionicons name="apps-outline" size={20} color={!filterRole ? "#3B82F6" : "#94A3B8"} />
@@ -258,9 +260,9 @@ export default function UserListTab({ states }) {
                 {!filterRole && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
               </TouchableOpacity>
               {ROLES_LIST.map(r => (
-                <TouchableOpacity 
-                  key={r.id} 
-                  style={[s.modalItem, filterRole === r.id && s.modalItemActive]} 
+                <TouchableOpacity
+                  key={r.id}
+                  style={[s.modalItem, filterRole === r.id && s.modalItemActive]}
                   onPress={() => { setFilterRole(r.id); setFilterRoleMenuVisible(false); }}
                 >
                   <Ionicons name={r.icon} size={20} color={filterRole === r.id ? "#3B82F6" : "#94A3B8"} />
@@ -281,8 +283,8 @@ export default function UserListTab({ states }) {
             <View style={s.modalHandle} />
             <Text style={s.modalSheetTitle}>Filtrar por estado</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <TouchableOpacity 
-                style={[s.modalItem, !filterStateId && s.modalItemActive]} 
+              <TouchableOpacity
+                style={[s.modalItem, !filterStateId && s.modalItemActive]}
                 onPress={() => { setFilterStateId(null); setFilterStateMenuVisible(false); }}
               >
                 <Ionicons name="apps-outline" size={20} color={!filterStateId ? "#3B82F6" : "#94A3B8"} />
@@ -290,9 +292,9 @@ export default function UserListTab({ states }) {
                 {!filterStateId && <Ionicons name="checkmark" size={20} color="#3B82F6" />}
               </TouchableOpacity>
               {(states || []).map(st => (
-                <TouchableOpacity 
-                  key={st.id} 
-                  style={[s.modalItem, filterStateId === st.id && s.modalItemActive]} 
+                <TouchableOpacity
+                  key={st.id}
+                  style={[s.modalItem, filterStateId === st.id && s.modalItemActive]}
                   onPress={() => { setFilterStateId(st.id); setFilterStateMenuVisible(false); }}
                 >
                   <View style={[s.dotSmall, { backgroundColor: st.color, marginRight: 4 }]} />
@@ -313,7 +315,7 @@ export default function UserListTab({ states }) {
             <View style={s.modalHandle} />
             <Text style={s.modalSheetTitle}>Cambiar rol</Text>
             <Text style={s.modalSub}>{selectedUser?.name}</Text>
-            
+
             <View style={s.rolesListCompact}>
               {Object.keys(ROLE_CONFIG)
                 .filter(r => {
@@ -325,10 +327,10 @@ export default function UserListTab({ states }) {
                 .map(roleKey => {
                   const config = ROLE_CONFIG[roleKey];
                   return (
-                    <TouchableOpacity 
-                      key={roleKey} 
+                    <TouchableOpacity
+                      key={roleKey}
                       style={s.compactActionRow}
-                      onPress={() => handleUpdateRole(roleKey)}
+                      onPress={() => { setPendingRole(roleKey); setRoleModalVisible(false); setConfirmModalVisible(true); }}
                     >
                       <View style={[s.compactIcon, { backgroundColor: config.color + "15" }]}>
                         <Ionicons name={config.icon} size={16} color={config.color} />
@@ -352,30 +354,67 @@ export default function UserListTab({ states }) {
             <View style={s.modalHandle} />
             <Text style={s.modalSheetTitle}>Gestionar estados</Text>
             <Text style={s.modalSub}>{selectedUser?.name}</Text>
-            
+
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: height * 0.4 }}>
               {(states || []).map(state => {
                 const has = selectedUser?.states?.some(s => s.id === state.id);
                 return (
-                  <TouchableOpacity 
-                    key={state.id} 
-                    style={[s.compactActionRow, has && { backgroundColor: "#F8FAFC" }]} 
+                  <TouchableOpacity
+                    key={state.id}
+                    style={[s.compactActionRow, has && { backgroundColor: "#F8FAFC" }]}
                     onPress={() => handleToggleState(state)}
                   >
                     <View style={[s.dotSmall, { backgroundColor: state.color, marginRight: 4 }]} />
                     <Text style={[s.compactLabel, has && { color: state.color, fontWeight: "700" }]}>{state.name}</Text>
-                    <Ionicons 
-                      name={has ? "checkbox" : "square-outline"} 
-                      size={18} 
-                      color={has ? state.color : "#CBD5E1"} 
+                    <Ionicons
+                      name={has ? "checkbox" : "square-outline"}
+                      size={18}
+                      color={has ? state.color : "#CBD5E1"}
                     />
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-            <TouchableOpacity style={s.doneBtn} onPress={() => setStatesModalVisible(false)}>
-              <Text style={s.doneBtnTxt}>Guardar cambios</Text>
-            </TouchableOpacity>
+            <View style={{ height: 20 }} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Confirmación de Rol (Premium) */}
+      <Modal visible={confirmModalVisible} transparent animationType="fade">
+        <View style={s.confirmOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setConfirmModalVisible(false)} />
+          <View style={s.confirmCard}>
+            <View style={s.confirmHeader}>
+              <View style={s.confirmIconMain}>
+                <Ionicons name="alert-circle-outline" size={32} color="#6366F1" />
+              </View>
+              <Text style={s.confirmTitle}>{selectedUser?.name}</Text>
+              <View style={s.confirmSubBadge}>
+                <Text style={s.confirmSubText}>cambio de Rol</Text>
+              </View>
+            </View>
+
+            <View style={s.confirmComparison}>
+              <View style={s.confirmRoleBox}>
+                <View style={[s.dotSmall, { backgroundColor: ROLE_CONFIG[selectedUser?.role]?.color || "#94A3B8" }]} />
+                <Text style={s.confirmRoleName}>{ROLE_CONFIG[selectedUser?.role]?.label || "Actual"}</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={16} color="#CBD5E1" />
+              <View style={s.confirmRoleBox}>
+                <View style={[s.dotSmall, { backgroundColor: ROLE_CONFIG[pendingRole]?.color || "#94A3B8" }]} />
+                <Text style={[s.confirmRoleName, { color: ROLE_CONFIG[pendingRole]?.color }]}>{ROLE_CONFIG[pendingRole]?.label}</Text>
+              </View>
+            </View>
+
+            <View style={s.confirmActions}>
+              <TouchableOpacity style={s.confirmCancel} onPress={() => setConfirmModalVisible(false)}>
+                <Text style={s.confirmCancelTxt}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.confirmSubmit} onPress={handleUpdateRole}>
+                <Text style={s.confirmSubmitTxt}>Confirmar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -385,24 +424,24 @@ export default function UserListTab({ states }) {
 
 const s = StyleSheet.create({
   list: { padding: 16, paddingBottom: 100 },
-  
-  controls: { 
-    backgroundColor: "white", 
-    paddingHorizontal: 14, 
+
+  controls: {
+    backgroundColor: "white",
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 18,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#F1F5F9",
   },
-  searchRow: { 
-    flexDirection: "row", 
+  searchRow: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 8, 
-    marginBottom: 10 
+    gap: 8,
+    marginBottom: 10
   },
-  filtersRow: { 
-    flexDirection: "row", 
+  filtersRow: {
+    flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
@@ -411,18 +450,18 @@ const s = StyleSheet.create({
   },
 
   // User Card
-  userCard: { 
-    backgroundColor: "white", 
-    borderRadius: 22, 
-    marginBottom: 14, 
-    padding: 14, 
+  userCard: {
+    backgroundColor: "white",
+    borderRadius: 22,
+    marginBottom: 14,
+    padding: 14,
     borderWidth: 1,
     borderColor: "#F1F5F9",
-    shadowColor: "#0F172A", 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.04, 
-    shadowRadius: 8, 
-    elevation: 2 
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2
   },
   userCardDisabled: { opacity: 0.8 },
   userRow: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
@@ -433,46 +472,46 @@ const s = StyleSheet.create({
   selfBadge: { backgroundColor: "#F1F5F9", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
   selfBadgeTxt: { fontSize: 8, fontWeight: "800", color: "#64748B" },
   userEmail: { fontSize: 12, color: "#94A3B8", marginTop: 1 },
-  
+
   statesRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginBottom: 14 },
-  statePill: { 
+  statePill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8, 
-    paddingVertical: 3, 
-    borderRadius: 8, 
-    borderWidth: 1 
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1
   },
   statePillTxt: { fontSize: 10, fontWeight: "700" },
   noStatesTxt: { fontSize: 11, color: "#CBD5E1", fontStyle: "italic" },
-  
-  roleBadge: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    paddingHorizontal: 8, 
-    paddingVertical: 4, 
+
+  roleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 8,
   },
   roleBadgeTxt: { fontSize: 10, fontWeight: "800", textTransform: "capitalize" },
-  
-  actionRow: { 
-    flexDirection: "row", 
-    gap: 8, 
+
+  actionRow: {
+    flexDirection: "row",
+    gap: 8,
     paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: "#F8FAFC",
   },
-  actionBtn: { 
-    flex: 1, 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    gap: 5, 
-    paddingVertical: 10, 
-    backgroundColor: "#F8FAFC", 
-    borderRadius: 12, 
-    borderWidth: 1, 
-    borderColor: "#F1F5F9" 
+  actionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 10,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9"
   },
   actionBtnDisabled: { backgroundColor: "#F1F5F9", borderColor: "transparent" },
   actionTxt: { fontSize: 12, fontWeight: "700" },
@@ -480,33 +519,33 @@ const s = StyleSheet.create({
 
   emptyContainer: { alignItems: "center", marginTop: 80, gap: 10 },
   empty: { textAlign: "center", color: "#94A3B8", fontSize: 14, fontWeight: "500" },
-  
+
   // Modals Premium
   modalOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.4)", justifyContent: "flex-end" },
-  modalSheet: { 
-    backgroundColor: "white", 
-    borderTopLeftRadius: 28, 
-    borderTopRightRadius: 28, 
-    padding: 20, 
+  modalSheet: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
     paddingTop: 12,
   },
-  modalHandle: { 
-    width: 36, 
-    height: 4, 
-    backgroundColor: "#E2E8F0", 
-    borderRadius: 2, 
-    alignSelf: "center", 
-    marginBottom: 16 
+  modalHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 16
   },
-  modalSheetTitle: { 
-    fontSize: 16, 
-    fontWeight: "800", 
-    color: "#1E293B", 
-    marginBottom: 14 
+  modalSheetTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#1E293B",
+    marginBottom: 14
   },
-  modalItem: { 
-    flexDirection: "row", 
-    alignItems: "center", 
+  modalItem: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
@@ -516,18 +555,18 @@ const s = StyleSheet.create({
   modalItemActive: {
     backgroundColor: "#F8FAFC",
   },
-  modalItemTxt: { 
+  modalItemTxt: {
     flex: 1,
-    fontSize: 13, 
-    fontWeight: "500", 
-    color: "#64748B" 
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#64748B"
   },
-  modalItemTxtActive: { 
+  modalItemTxtActive: {
     color: "#3B82F6",
     fontWeight: "600",
   },
   modalSub: { fontSize: 12, color: "#94A3B8", marginTop: -10, marginBottom: 14, fontWeight: "500" },
-  
+
   dotSmall: { width: 6, height: 6, borderRadius: 3 },
 
   rolesListCompact: { gap: 2 },
@@ -538,6 +577,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 10,
     gap: 12,
+    marginBottom: 6,
   },
   compactIcon: {
     width: 32,
@@ -552,13 +592,85 @@ const s = StyleSheet.create({
     fontWeight: "500",
     color: "#475569",
   },
-  
-  doneBtn: { 
-    backgroundColor: "#0F172A", 
-    paddingVertical: 12, 
-    borderRadius: 12, 
-    alignItems: "center", 
+
+  doneBtn: {
+    backgroundColor: "#0F172A",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
     marginTop: 10,
   },
   doneBtnTxt: { color: "white", fontSize: 13, fontWeight: "800" },
+
+  // Confirmation Modal Premium Styles
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24
+  },
+  confirmCard: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: "white",
+    borderRadius: 28,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  confirmHeader: { alignItems: "center", marginBottom: 20 },
+  confirmIconMain: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "#EEF2FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  confirmTitle: { fontSize: 18, fontWeight: "800", color: "#1E293B" },
+  confirmSubBadge: {
+    backgroundColor: "#EEF2FF",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  confirmSubText: { fontSize: 10, fontWeight: "700", color: "#6366F1", textTransform: "uppercase" },
+
+  confirmComparison: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  confirmRoleBox: { flexDirection: "row", alignItems: "center", gap: 6 },
+  confirmRoleName: { fontSize: 12, fontWeight: "700", color: "#64748B" },
+
+  confirmActions: { flexDirection: "row", gap: 10 },
+  confirmCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center"
+  },
+  confirmCancelTxt: { fontSize: 13, fontWeight: "700", color: "#64748B" },
+  confirmSubmit: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: "#6366F1",
+    alignItems: "center",
+  },
+  confirmSubmitTxt: { fontSize: 13, fontWeight: "700", color: "white" },
 });
