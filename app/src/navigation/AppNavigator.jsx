@@ -120,6 +120,7 @@ export default function AppNavigator() {
             <Stack.Screen name="UserManagement" component={UserManagementScreen} />
             <Stack.Screen name="SystemConfig" component={SystemConfigScreen} />
             <Stack.Screen name="AdminStates" component={AdminStatesScreen} />
+            <Stack.Screen name="UserProfile" component={ProfileScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

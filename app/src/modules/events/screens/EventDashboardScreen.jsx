@@ -69,17 +69,24 @@ const getEventStatus = (eventDateStr, startTimeStr, endTimeStr) => {
 const getTabIcon = (tabName) => {
   switch(tabName) {
     case "Explorar": return "compass";
-    case "Mis eventos": return "calendar";
+    case "Inscritos": return "calendar";
     case "Organizar": return "create";
     default: return "list";
   }
 };
 
-export default function EventDashboardScreen({ navigation }) {
+export default function EventDashboardScreen({ navigation, route }) {
   const { user, isAdmin, isHelper } = useAuth();
   const showManageTab = isAdmin() || isHelper() || user?.role === "Organizer";
-  const TABS = showManageTab ? ["Explorar", "Mis eventos", "Organizar"] : ["Explorar", "Mis eventos"];
-  const [activeTab, setActiveTab] = useState(0);
+  const TABS = showManageTab ? ["Explorar", "Inscritos", "Organizar"] : ["Explorar", "Inscritos"];
+  const [activeTab, setActiveTab] = useState(route.params?.initialTab ?? 0);
+
+  // Sincronizar pestaña si cambia por navegación externa
+  useEffect(() => {
+    if (route.params?.initialTab !== undefined) {
+      setActiveTab(route.params.initialTab);
+    }
+  }, [route.params?.initialTab]);
 
   const [allEvents, setAllEvents] = useState([]);
   const [myInscribedEvents, setMyInscribedEvents] = useState([]);
@@ -91,15 +98,11 @@ export default function EventDashboardScreen({ navigation }) {
   const [actionLoading, setActionLoading] = useState({});
   const [sortBy, setSortBy] = useState("newest");
   const [searchText, setSearchText] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("upcoming");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [sortModalVisible, setSortModalVisible] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [participants, setParticipants] = useState([]);
-  const [participantsLoading, setParticipantsLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!user?.id) return;
@@ -109,25 +112,29 @@ export default function EventDashboardScreen({ navigation }) {
 
       const { data: eventsData, error } = await supabase
         .from("events")
-        .select("*, profiles(name, role, id), event_categories_junction(categories(*))")
+        .select("*, profiles(name, role, id, avatar_url, user_states(states(name, color))), event_categories_junction(categories(*))")
         .order("date", { ascending: sortBy === "newest" ? false : true });
 
       if (error) throw error;
 
       const normalized = (eventsData ?? []).map(e => ({
         ...e,
+        profiles: e.profiles ? {
+          ...e.profiles,
+          states: e.profiles.user_states?.map(us => us.states).filter(Boolean) ?? []
+        } : null,
         categories: (e.event_categories_junction ?? []).map(j => j.categories).filter(Boolean),
       }));
 
-      setAllEvents(normalized.filter(e => e.created_by !== user.id));
+      setAllEvents(normalized.filter(e => e.created_by !== user?.id));
       
       let managed = [];
       if (isAdmin()) managed = normalized;
       else if (isHelper()) managed = normalized.filter(e => e.profiles?.role !== "Admin");
-      else managed = normalized.filter(e => e.created_by === user.id);
+      else managed = normalized.filter(e => e.created_by === user?.id);
       setMyManagedEvents(managed);
 
-      const myRes = await getMyRegistrations(user.id);
+      const myRes = await getMyRegistrations(user?.id);
       if (myRes.success) {
         setMyInscribedEvents(myRes.data.map(e => ({ ...e, ...normalized.find(ne => ne.id === e.id) })));
         setRegisteredIds(new Set(myRes.data.map(e => e.id)));
@@ -185,18 +192,11 @@ export default function EventDashboardScreen({ navigation }) {
     ]);
   };
 
-  const handleViewParticipants = async (event) => {
-    setSelectedEvent(event);
-    setModalVisible(true);
-    setParticipantsLoading(true);
-    const res = await getEventParticipants(event.id);
-    setParticipants(res.success ? res.data : []);
-    setParticipantsLoading(false);
-  };
+
 
   const renderItem = ({ item }) => {
     const status = getEventStatus(item.date, item.start_time, item.end_time);
-    const isOwner = item.created_by === user.id || isAdmin();
+    const isOwner = item.created_by === user?.id || isAdmin();
     const formattedDate = parseDate(item.date);
     const day = formattedDate.getUTCDate();
     const month = formattedDate.toLocaleDateString("es-ES", { month: "short", timeZone: "UTC" }).toUpperCase().replace(".", "");
@@ -207,64 +207,50 @@ export default function EventDashboardScreen({ navigation }) {
         activeOpacity={0.9} 
         onPress={() => navigation.navigate("EventDetails", { event: item })}
       >
+        {/* IMAGEN Y OVERLAYS */}
         <View style={s.cardImgBox}>
           {item.image_url ? (
             <Image source={{ uri: item.image_url }} style={s.cardImg} contentFit="cover" />
           ) : (
-            <LinearGradient colors={["#1E293B", "#0F172A"]} style={s.cardImg} />
+            <LinearGradient colors={["#1E1B4B", "#312E81"]} style={s.cardImg} />
           )}
+          
           <LinearGradient 
-            colors={["transparent", "rgba(0,0,0,0.7)"]} 
+            colors={["rgba(0,0,0,0.4)", "transparent", "rgba(0,0,0,0.8)"]} 
             style={StyleSheet.absoluteFill} 
           />
           
-          <View style={[s.statusTag, { backgroundColor: status.bg, borderColor: status.borderColor }]}>
+          {/* Badge de Estado (Glassmorphism style) */}
+          <View style={[s.statusTag, { backgroundColor: status.bg + 'CC', borderColor: status.borderColor }]}>
             <View style={[s.statusDot, { backgroundColor: status.color }]} />
             <Text style={[s.statusTagTxt, { color: status.color }]}>{status.label}</Text>
           </View>
-          
-          <View style={s.cardActions}>
-            {isOwner && activeTab === 2 && (
-              <TouchableOpacity style={s.cardActionBtn} onPress={() => handleViewParticipants(item)}>
-                <Ionicons name="people-outline" size={16} color="white" />
-              </TouchableOpacity>
-            )}
-            {isOwner && activeTab === 2 && (
-              <TouchableOpacity style={[s.cardActionBtn, s.cardActionBtnDanger]} onPress={() => handleDeleteEvent(item.id)}>
-                <Ionicons name="trash-outline" size={16} color="#FEE2E2" />
-              </TouchableOpacity>
-            )}
+
+          {/* Fecha y Hora dentro de la imagen (Mismo estilo que el estado) */}
+          <View style={[s.imageDateTime, { backgroundColor: status.bg + 'CC', borderColor: status.borderColor }]}>
+            <Ionicons name="calendar-outline" size={10} color={status.color} />
+            <Text style={[s.imageDateTimeTxt, { color: status.color }]}>{day} {month}</Text>
+            <View style={[s.dateTimeSeparator, { backgroundColor: status.color + '40' }]} />
+            <Ionicons name="time-outline" size={10} color={status.color} />
+            <Text style={[s.imageDateTimeTxt, { color: status.color }]}>{formatTimeRange(item.start_time, item.end_time)}</Text>
           </View>
-          
-          <View style={s.dateBadge}>
-            <Text style={s.dateDay}>{day}</Text>
-            <Text style={s.dateMonth}>{month}</Text>
+
+          {/* Categorías dentro de la imagen (Súper Translúcidas) */}
+          <View style={s.imageCategories}>
+            {item.categories?.map((cat) => (
+              <View key={cat.id} style={[s.imageCat, { backgroundColor: cat.color + '66', borderColor: cat.color }]}>
+                <Text style={s.imageCatTxt}>{cat.name}</Text>
+              </View>
+            ))}
           </View>
         </View>
         
+        {/* INFORMACIÓN */}
         <View style={s.cardInfo}>
-          <View style={s.cardHeader}>
-            {item.categories?.[0] && (
-              <View style={[s.catChip, { backgroundColor: item.categories[0].color + '15' }]}>
-                <View style={[s.catChipDot, { backgroundColor: item.categories[0].color }]} />
-                <Text style={[s.catChipTxt, { color: item.categories[0].color }]}>
-                  {item.categories[0].name}
-                </Text>
-              </View>
-            )}
-          </View>
-          
           <Text style={s.cardTitle} numberOfLines={2}>{item.title}</Text>
-          
-          <View style={s.cardMeta}>
-            <View style={s.metaItem}>
-              <Ionicons name="location-outline" size={14} color="#94A3B8" />
-              <Text style={s.metaTxt} numberOfLines={1}>{item.location}</Text>
-            </View>
-            <View style={s.metaItem}>
-              <Ionicons name="time-outline" size={14} color="#94A3B8" />
-              <Text style={s.metaTxt}>{formatTimeRange(item.start_time, item.end_time)}</Text>
-            </View>
+          <View style={s.locationRow}>
+            <Ionicons name="location-outline" size={12} color="#94A3B8" />
+            <Text style={s.locationTxt} numberOfLines={1}>{item.location}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -284,48 +270,6 @@ export default function EventDashboardScreen({ navigation }) {
         getTabIcon={getTabIcon}
       />
 
-      <View style={s.controls}>
-        <View style={s.searchRow}>
-          <SearchBar 
-            value={searchText} 
-            onChangeText={setSearchText} 
-            placeholder="Buscar eventos o lugares..." 
-          />
-          <TouchableOpacity 
-            style={[s.compactSortBtn, sortBy !== "newest" && s.compactSortBtnActive]}
-            onPress={() => setSortModalVisible(true)}
-          >
-            <Ionicons 
-              name={sortBy === "newest" ? "arrow-up" : "arrow-down"} 
-              size={18} 
-              color={sortBy !== "newest" ? "#3B82F6" : "#64748B"} 
-            />
-          </TouchableOpacity>
-        </View>
-        
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          contentContainerStyle={s.filtersScroll}
-          style={s.filtersContainer}
-        >
-          <FilterChip 
-            icon="options-outline"
-            label={filterStatus === "all" ? "Estado" : 
-                   filterStatus === "upcoming" ? "Próximos" : 
-                   filterStatus === "ongoing" ? "En curso" : "Pasados"}
-            isActive={filterStatus !== "all"}
-            onPress={() => setStatusModalVisible(true)}
-          />
-          <FilterChip 
-            icon="grid-outline"
-            label={selectedCategoryIds.length > 0 ? `${selectedCategoryIds.length} Categorías` : "Categorías"}
-            isActive={selectedCategoryIds.length > 0}
-            onPress={() => setCategoryModalVisible(true)}
-          />
-        </ScrollView>
-      </View>
-
       {loading ? (
         <View style={s.centered}>
           <ActivityIndicator size="large" color="#3B82F6" />
@@ -335,6 +279,57 @@ export default function EventDashboardScreen({ navigation }) {
         <FlatList
           data={filteredData}
           keyExtractor={item => item.id}
+          ListHeaderComponent={
+            <View style={s.controls}>
+              <View style={s.searchRow}>
+                <SearchBar 
+                  value={searchText} 
+                  onChangeText={setSearchText} 
+                  placeholder="Buscar eventos o lugares..." 
+                />
+                <TouchableOpacity 
+                  style={[s.compactSortBtn, sortBy !== "newest" && s.compactSortBtnActive]}
+                  onPress={() => setSortModalVisible(true)}
+                >
+                  <Ionicons 
+                    name={sortBy === "newest" ? "arrow-up" : "arrow-down"} 
+                    size={18} 
+                    color={sortBy !== "newest" ? "#3B82F6" : "#64748B"} 
+                  />
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                contentContainerStyle={s.filtersScroll}
+                style={s.filtersContainer}
+              >
+                <FilterChip 
+                  icon="options-outline"
+                  label={filterStatus === "all" ? "Todos" : 
+                         filterStatus === "upcoming" ? "Próximos" : 
+                         filterStatus === "ongoing" ? "En curso" : "Pasados"}
+                  isActive={filterStatus !== "upcoming"}
+                  onPress={() => setStatusModalVisible(true)}
+                />
+                <FilterChip 
+                  icon="grid-outline"
+                  label={selectedCategoryIds.length > 0 ? `${selectedCategoryIds.length} Categorías` : "Categorías"}
+                  isActive={selectedCategoryIds.length > 0}
+                  onPress={() => setCategoryModalVisible(true)}
+                />
+                {(filterStatus !== "upcoming" || selectedCategoryIds.length > 0) && (
+                  <TouchableOpacity 
+                    onPress={() => { setFilterStatus("upcoming"); setSelectedCategoryIds([]); }} 
+                    style={s.clearBtnSmall}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#EF4444" />
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            </View>
+          }
           renderItem={renderItem}
           contentContainerStyle={s.listContent}
           showsVerticalScrollIndicator={false}
@@ -364,52 +359,17 @@ export default function EventDashboardScreen({ navigation }) {
       {activeTab === 2 && (
         <TouchableOpacity style={s.fab} onPress={() => navigation.navigate("CreateEvent", { event: null })}>
           <LinearGradient 
-            colors={["#3B82F6", "#2563EB"]} 
+            colors={["rgba(30, 27, 75, 0.85)", "rgba(49, 46, 129, 0.85)"]} 
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={s.fabGradient}
           >
-            <Ionicons name="add" size={28} color="white" />
+            <Ionicons name="add" size={32} color="rgba(255, 255, 255, 0.9)" />
           </LinearGradient>
         </TouchableOpacity>
       )}
 
-      {/* Modal Participantes */}
-      <Modal visible={modalVisible} transparent animationType="fade">
-        <View style={s.modalOverlayCenter}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
-          <View style={s.modalBox}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle} numberOfLines={1}>Asistentes · {selectedEvent?.title}</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-            {participantsLoading ? (
-              <ActivityIndicator size="large" color="#3B82F6" style={{ margin: 40 }} />
-            ) : participants.length === 0 ? (
-              <View style={s.emptyModal}>
-                <Ionicons name="people-outline" size={48} color="#CBD5E1" />
-                <Text style={s.emptyModalTxt}>Aún no hay inscritos</Text>
-              </View>
-            ) : (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {participants.map((p) => (
-                  <View key={p.id} style={s.pRow}>
-                    <View style={[s.pAvatar, { backgroundColor: "#EFF6FF" }]}>
-                      <Text style={s.pAvatarTxt}>{p.name?.[0]?.toUpperCase() || "?"}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.pName}>{p.name}</Text>
-                      <Text style={s.pEmail}>{p.email}</Text>
-                    </View>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
+
 
       {/* Modal Estado */}
       <Modal visible={statusModalVisible} transparent animationType="fade">
@@ -503,36 +463,41 @@ const s = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
   loadingText: { fontSize: 14, color: "#94A3B8", fontWeight: "500" },
   
-  controls: { 
-    backgroundColor: "white", 
-    paddingHorizontal: 16, 
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+  controls: {
+    backgroundColor: "white",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
   },
   searchRow: { 
     flexDirection: "row", 
     alignItems: "center",
-    gap: 12, 
-    marginBottom: 12 
+    gap: 8, 
+    marginBottom: 10 
   },
   filtersContainer: {
-    marginHorizontal: -16, 
+    marginHorizontal: 0, 
   },
   filtersScroll: {
-    paddingHorizontal: 16,
-    gap: 10,
+    paddingHorizontal: 0,
+    gap: 6,
     flexDirection: "row",
     alignItems: "center",
   },
+  clearBtnSmall: {
+    padding: 4,
+  },
   compactSortBtn: {
-    width: 46,
-    height: 46,
+    width: 44,
+    height: 44,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "white",
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
@@ -547,19 +512,19 @@ const s = StyleSheet.create({
   },
   card: { 
     backgroundColor: "white", 
-    borderRadius: 24, 
+    borderRadius: 28, 
     marginBottom: 24, 
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "#F1F5F9",
     shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 8,
   },
   cardImgBox: { 
-    height: 200, 
+    height: 190, 
     position: "relative" 
   },
   cardImg: { 
@@ -567,119 +532,211 @@ const s = StyleSheet.create({
   },
   statusTag: { 
     position: "absolute",
-    top: 16,
-    left: 16,
+    top: 12,
+    left: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: 4,
+    paddingHorizontal: 10,
+    height: 24,
     borderRadius: 12,
     borderWidth: 1,
-    backgroundColor: "rgba(255,255,255,0.9)",
   },
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
   statusTagTxt: { 
-    fontSize: 11, 
-    fontWeight: "700" 
+    fontSize: 9, 
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5
   },
-  cardActions: {
+  cardDeleteBtn: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(239, 68, 68, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  premiumDateBadge: { 
+    position: "absolute", 
+    top: 12, 
+    right: 12, 
+    backgroundColor: "rgba(15, 23, 42, 0.75)", 
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14, 
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  premiumDateDay: { 
+    fontSize: 18, 
+    fontWeight: "900", 
+    color: "white",
+    lineHeight: 20,
+  },
+  premiumDateMonth: { 
+    fontSize: 8, 
+    fontWeight: "800", 
+    color: "#818CF8",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginTop: -1
+  },
+  imageDateTime: {
     position: "absolute",
     top: 12,
     right: 12,
     flexDirection: "row",
-    gap: 8,
-  },
-  cardActionBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
     alignItems: "center",
-  },
-  cardActionBtnDanger: {
-    backgroundColor: "rgba(239,68,68,0.8)",
-  },
-  dateBadge: { 
-    position: "absolute", 
-    bottom: 12, 
-    right: 12, 
-    backgroundColor: "white", 
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.25)",
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12, 
-    alignItems: "center",
-    minWidth: 50,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  imageDateTimeTxt: {
+    color: "white",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  dateTimeSeparator: {
+    width: 1,
+    height: 8,
+    backgroundColor: "rgba(255,255,255,0.4)",
+    marginHorizontal: 1,
+  },
+  imageCategories: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    maxWidth: '70%',
+  },
+  imageCat: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  imageCatTxt: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: "white",
+    textTransform: "uppercase",
+  },
+  organizerFloating: {
+    position: "absolute",
+    bottom: -18,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "white",
+    padding: 3,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+    zIndex: 10,
   },
-  dateDay: { 
-    fontSize: 18, 
-    fontWeight: "800", 
-    color: "#1E293B",
-    lineHeight: 22,
+  organizerAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 19,
   },
-  dateMonth: { 
-    fontSize: 9, 
-    fontWeight: "700", 
-    color: "#64748B",
-    letterSpacing: 0.5,
+  organizerPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  organizerInitials: {
+    color: 'white',
+    fontWeight: '900',
+    fontSize: 16,
   },
   cardInfo: { 
-    padding: 16 
+    padding: 18,
+    paddingTop: 22,
   },
-  cardHeader: {
+  cardHeaderRow: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
-  catChip: { 
+  categoryList: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 10, 
-    paddingVertical: 4, 
-    borderRadius: 12,
   },
-  catChipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  compactCat: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  catChipTxt: { 
-    fontSize: 10, 
-    fontWeight: "800" 
+  compactCatTxt: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  moreCats: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#94A3B8",
   },
   cardTitle: { 
-    fontSize: 20, 
-    fontWeight: "800", 
+    fontSize: 24, 
+    fontWeight: "900", 
     color: "#0F172A", 
-    marginBottom: 12, 
-    lineHeight: 28,
-    letterSpacing: -0.5,
+    lineHeight: 30,
+    letterSpacing: -0.8,
   },
-  cardMeta: { 
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  locationTxt: {
+    fontSize: 12,
+    color: "#94A3B8",
+    fontWeight: "600",
+  },
+  cardFooter: { 
     flexDirection: "row", 
-    gap: 12,
-    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
-  metaItem: { 
+  footerItem: { 
     flexDirection: "row", 
     alignItems: "center", 
-    gap: 5,
+    gap: 6,
     flexShrink: 1,
   },
-  metaTxt: { 
-    fontSize: 13, 
+  footerTxt: { 
+    fontSize: 12, 
     color: "#64748B", 
-    fontWeight: "600",
+    fontWeight: "700",
     flexShrink: 1,
   },
   
@@ -687,20 +744,22 @@ const s = StyleSheet.create({
     position: "absolute", 
     bottom: 24, 
     right: 20, 
-    width: 56, 
-    height: 56, 
-    borderRadius: 28,
-    shadowColor: "#3B82F6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    width: 60, 
+    height: 60, 
+    borderRadius: 30,
+    shadowColor: "#1E1B4B",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
   fabGradient: { 
     flex: 1, 
-    borderRadius: 28, 
+    borderRadius: 30, 
     justifyContent: "center", 
-    alignItems: "center" 
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.25)",
   },
   
   empty: { 
@@ -749,12 +808,6 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(15, 23, 42, 0.6)", 
     justifyContent: "flex-end" 
   },
-  modalOverlayCenter: { 
-    flex: 1, 
-    backgroundColor: "rgba(15, 23, 42, 0.6)", 
-    justifyContent: "center", 
-    padding: 20 
-  },
   modalSheet: { 
     backgroundColor: "white", 
     borderTopLeftRadius: 32, 
@@ -767,23 +820,6 @@ const s = StyleSheet.create({
     shadowRadius: 20,
     elevation: 20,
   },
-  modalBox: { 
-    backgroundColor: "white", 
-    borderRadius: 32, 
-    padding: 24, 
-    maxHeight: height * 0.8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  modalHeader: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center", 
-    marginBottom: 20 
-  },
   modalHandle: { 
     width: 50, 
     height: 5, 
@@ -792,18 +828,57 @@ const s = StyleSheet.create({
     alignSelf: "center", 
     marginBottom: 20 
   },
-  modalSheetTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1E293B",
-    marginBottom: 20,
+  modalHeaderDetailed: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 25,
+    paddingHorizontal: 5 
   },
-  modalTitle: { 
-    fontSize: 16, 
-    fontWeight: "700", 
-    color: "#1E293B", 
-    flex: 1 
+  modalHeaderTitleDetailed: { fontSize: 22, fontWeight: '900', color: '#1E293B' },
+  modalHeaderSubDetailed: { fontSize: 13, color: '#94A3B8', fontWeight: '600' },
+  participantsCountBadge: { backgroundColor: '#3B82F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  participantsCountTxt: { color: 'white', fontWeight: '900', fontSize: 14 },
+  
+  participantCardDetailed: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingVertical: 14, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F1F5F9',
+    gap: 15 
   },
+  pAvatarDetailed: { width: 50, height: 50, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  pAvatarTxtDetailed: { fontSize: 18, fontWeight: '900' },
+  pInfoDetailed: { flex: 1, gap: 4 },
+  pNameRowDetailed: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pNameDetailed: { fontSize: 15, fontWeight: '800', color: '#1E293B' },
+  roleBadgeDetailed: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  roleBadgeTxtDetailed: { fontSize: 9, fontWeight: '900', textTransform: 'uppercase' },
+  pEmailDetailed: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+  pActionBtnDetailed: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center' },
+  
+  modalLoading: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 15 },
+  modalLoadingTxt: { fontSize: 14, color: '#94A3B8', fontWeight: '600' },
+  
+  emptyModalDetailed: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  emptyModalIconBox: { width: 80, height: 80, borderRadius: 30, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  emptyModalTitleDetailed: { fontSize: 18, fontWeight: '800', color: '#1E293B', marginBottom: 8 },
+  emptyModalSubDetailed: { fontSize: 14, color: '#94A3B8', textAlign: 'center', fontWeight: '500' },
+  
+  modalCloseBtnDetailed: { backgroundColor: '#0F172A', height: 56, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginTop: 20 },
+  modalCloseBtnTxtDetailed: { color: 'white', fontWeight: '900', fontSize: 16 },
+
+  participantControls: { marginBottom: 20, gap: 12 },
+  pSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', paddingHorizontal: 12, height: 44, borderRadius: 12, borderWidth: 1, borderColor: '#F1F5F9', gap: 10 },
+  pSearchInput: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1E293B' },
+  pFilterScroll: { gap: 8, paddingHorizontal: 2 },
+  pFilterPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: 'transparent' },
+  pFilterPillActive: { backgroundColor: '#EFF6FF', borderColor: '#3B82F6' },
+  pFilterPillTxt: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  pFilterPillTxtActive: { color: '#3B82F6' },
+
+  modalSheetTitle: { fontSize: 18, fontWeight: "800", color: "#1E293B", marginBottom: 20 },
   modalItem: { 
     flexDirection: "row", 
     alignItems: "center", 
@@ -813,75 +888,10 @@ const s = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 6,
   },
-  modalItemActive: {
-    backgroundColor: "#EFF6FF",
-  },
-  modalItemTxt: { 
-    flex: 1,
-    fontSize: 15, 
-    fontWeight: "500", 
-    color: "#64748B" 
-  },
-  modalItemTxtActive: { 
-    color: "#3B82F6",
-    fontWeight: "600",
-  },
-  modalColorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  applyBtn: { 
-    backgroundColor: "#1E293B", 
-    padding: 16, 
-    borderRadius: 16, 
-    alignItems: "center", 
-    marginTop: 20 
-  },
-  applyBtnTxt: { 
-    color: "white", 
-    fontWeight: "700", 
-    fontSize: 15 
-  },
-  
-  pRow: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 12, 
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-  },
-  pAvatar: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 22, 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  pAvatarTxt: { 
-    fontWeight: "800", 
-    color: "#3B82F6",
-    fontSize: 16,
-  },
-  pName: { 
-    fontSize: 15, 
-    fontWeight: "600", 
-    color: "#1F2937" 
-  },
-  pEmail: { 
-    fontSize: 12, 
-    color: "#94A3B8" 
-  },
-  emptyModal: { 
-    alignItems: "center", 
-    paddingVertical: 40,
-    gap: 12,
-  },
-  emptyModalTxt: { 
-    fontSize: 14, 
-    color: "#94A3B8" 
-  },
+  modalItemActive: { backgroundColor: "#EFF6FF" },
+  modalItemTxt: { fontSize: 15, fontWeight: "500", color: "#64748B", flex: 1 },
+  modalItemTxtActive: { color: "#3B82F6", fontWeight: "600" },
+  modalColorDot: { width: 12, height: 12, borderRadius: 6 },
 });
 
 

@@ -13,6 +13,14 @@ import { useNavigation } from "@react-navigation/native";
 
 const { width } = Dimensions.get("window");
 
+const formatTimeRange = (start, end) => {
+  if (!start) return "Todo el día";
+  const s = start.includes("T") ? start.split("T")[1].slice(0, 5) : start.slice(0, 5);
+  if (!end) return `${s} hs`;
+  const e = end.includes("T") ? end.split("T")[1].slice(0, 5) : end.slice(0, 5);
+  return `${s} - ${e} hs`;
+};
+
 const ROLE_CONFIG = {
   Admin: { label: "Admin", color: "#EF4444", icon: "shield-checkmark" },
   Helper: { label: "Helper", color: "#8B5CF6", icon: "briefcase" },
@@ -20,9 +28,13 @@ const ROLE_CONFIG = {
   User: { label: "Estudiante", color: "#3B82F6", icon: "person" },
 };
 
-export default function ProfileScreen() {
-  const { user, setUser, logout } = useAuth();
+export default function ProfileScreen({ route }) {
+  const { user: currentUser, updateUserProfileLocally, logout } = useAuth();
   const navigation = useNavigation();
+  const targetUserId = route.params?.userId;
+  const isOwnProfile = !targetUserId || targetUserId === currentUser.id;
+
+  const [targetUser, setTargetUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
@@ -30,13 +42,33 @@ export default function ProfileScreen() {
   });
   const [settingsVisible, setSettingsVisible] = useState(false);
 
-  const loadStats = useCallback(async () => {
-    if (!user?.id) return;
+  const loadData = useCallback(async () => {
     try {
+      setLoading(true);
+      let userData = currentUser;
+      
+      // Si estamos viendo a otro usuario, cargamos sus datos básicos
+      if (!isOwnProfile) {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("*, user_states(states(id, name, color))")
+          .eq("id", targetUserId)
+          .single();
+        if (error) throw error;
+        
+        // Aplanar estados
+        userData = {
+          ...profile,
+          states: profile.user_states?.map(us => us.states).filter(Boolean) ?? []
+        };
+      }
+      setTargetUser(userData);
+
+      // Cargar stats del usuario (propio o ajeno)
       const { data: userRegs } = await supabase
         .from("event_registrations")
         .select("*, events(*, categories:event_categories_junction(categories(*)))")
-        .eq("user_id", user.id);
+        .eq("user_id", userData.id);
 
       const regs = (userRegs || []).map(r => ({
         ...r,
@@ -54,17 +86,19 @@ export default function ProfileScreen() {
       const inscribed = regs.filter(r => new Date(r.events.date) >= now).length;
 
       const registeredEventIds = regs.map(r => r.event_id);
+      
+      // Para otros usuarios, tal vez no necesitamos "totalAvailable", pero lo dejamos por consistencia
       const { data: availableEvents } = await supabase
         .from("events")
         .select("id")
         .gte("date", isoNow)
-        .neq("created_by", user.id);
+        .neq("created_by", userData.id);
 
       const realAvailable = (availableEvents || []).filter(e => !registeredEventIds.includes(e.id)).length;
 
       let created = 0, finished = 0;
-      if (user.role !== 'User') {
-        const { data: myEvents } = await supabase.from("events").select("*").eq("created_by", user.id);
+      if (userData.role !== 'User') {
+        const { data: myEvents } = await supabase.from("events").select("*").eq("created_by", userData.id);
         created = myEvents?.length || 0;
         finished = myEvents?.filter(e => new Date(e.date) < now).length || 0;
       }
@@ -84,16 +118,18 @@ export default function ProfileScreen() {
       });
     } catch (e) {
       console.error(e);
+      Alert.alert("Error", "No se pudo cargar el perfil");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, user.role]);
+  }, [currentUser, targetUserId, isOwnProfile]);
 
-  useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  const roleInfo = ROLE_CONFIG[user?.role] ?? ROLE_CONFIG.User;
-  const isManager = user?.role !== 'User';
+  const activeUser = targetUser || currentUser;
+  const roleInfo = ROLE_CONFIG[activeUser?.role] ?? ROLE_CONFIG.User;
+  const isManager = activeUser?.role !== 'User';
 
   const AnalyticRing = ({ value, label, colors, icon }) => (
     <View style={s.ringItem}>
@@ -116,22 +152,32 @@ export default function ProfileScreen() {
       <StatusBar barStyle="light-content" />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadStats(); }} tintColor="white" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor="white" />}
       >
         {/* HERO */}
         <LinearGradient colors={["#0F172A", "#1E293B"]} style={s.hero}>
-          <TouchableOpacity style={s.settingsIcon} onPress={() => setSettingsVisible(true)}>
-            <Ionicons name="settings-outline" size={22} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
+          <View style={s.topBar}>
+            {!isOwnProfile ? (
+              <TouchableOpacity style={s.backIcon} onPress={() => navigation.goBack()}>
+                <Ionicons name="arrow-back" size={24} color="white" />
+              </TouchableOpacity>
+            ) : <View />}
+
+            {isOwnProfile && (
+              <TouchableOpacity style={s.settingsIcon} onPress={() => setSettingsVisible(true)}>
+                <Ionicons name="settings-outline" size={22} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
+            )}
+          </View>
 
           <View style={s.headerContent}>
             <View style={s.avatarSection}>
               <View style={s.avatarWrap}>
-                {user?.avatar_url ? (
-                  <Image source={{ uri: user.avatar_url }} style={s.avatar} contentFit="cover" />
+                {activeUser?.avatar_url ? (
+                  <Image source={{ uri: activeUser.avatar_url }} style={s.avatar} contentFit="cover" />
                 ) : (
                   <View style={s.avatarPlaceholder}>
-                    <Text style={s.avatarPlaceholderTxt}>{user?.name?.[0]?.toUpperCase()}</Text>
+                    <Text style={s.avatarPlaceholderTxt}>{activeUser?.name?.[0]?.toUpperCase()}</Text>
                   </View>
                 )}
                 <View style={[s.roleBadge, { backgroundColor: roleInfo.color }]}>
@@ -144,12 +190,12 @@ export default function ProfileScreen() {
             </View>
 
             <View style={s.infoSection}>
-              <Text style={s.userName}>{user?.name}</Text>
-              <Text style={s.userEmail} numberOfLines={1}>{user?.email}</Text>
+              <Text style={s.userName}>{activeUser?.name}</Text>
+              <Text style={s.userEmail} numberOfLines={1}>{activeUser?.email}</Text>
 
-              {user?.states?.length > 0 && (
+              {activeUser?.states?.length > 0 && (
                 <View style={s.miniStates}>
-                  {user.states.map(st => (
+                  {activeUser.states.map(st => (
                     <View key={st.id} style={s.miniStateItem}>
                       <View style={[s.dot, { backgroundColor: st.color }]} />
                       <Text style={s.miniStateTxt}>{st.name}</Text>
@@ -171,26 +217,42 @@ export default function ProfileScreen() {
 
             {/* Próximo Evento */}
             {stats.nextEvent ? (
-              <TouchableOpacity style={s.eventCard} onPress={() => navigation.navigate("EventDetails", { event: stats.nextEvent })}>
+              <TouchableOpacity style={s.eventCard} activeOpacity={0.9} onPress={() => navigation.navigate("EventDetails", { event: stats.nextEvent })}>
                 <View style={s.eventCardImgBox}>
-                  <Image source={{ uri: stats.nextEvent.image_url || "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4" }} style={s.eventCardImg} contentFit="cover" />
-                  <LinearGradient colors={["transparent", "rgba(0,0,0,0.6)"]} style={StyleSheet.absoluteFill} />
-                  <View style={s.eventDateBadge}>
-                    <Text style={s.eventDateDay}>{new Date(stats.nextEvent.date).getUTCDate()}</Text>
-                    <Text style={s.eventDateMonth}>{new Date(stats.nextEvent.date).toLocaleDateString('es-ES', { month: 'short' }).toUpperCase()}</Text>
+                  {stats.nextEvent.image_url ? (
+                    <Image source={{ uri: stats.nextEvent.image_url }} style={s.eventCardImg} contentFit="cover" />
+                  ) : (
+                    <LinearGradient colors={["#1E1B4B", "#312E81"]} style={s.eventCardImg} />
+                  )}
+                  <LinearGradient colors={["rgba(0,0,0,0.4)", "transparent", "rgba(0,0,0,0.8)"]} style={StyleSheet.absoluteFill} />
+                  
+                  <View style={[s.statusTag, { backgroundColor: "#EFF6FFCC", borderColor: "#BFDBFE" }]}>
+                    <View style={[s.statusDot, { backgroundColor: "#3B82F6" }]} />
+                    <Text style={[s.statusTagTxt, { color: "#3B82F6" }]}>PRÓXIMO</Text>
+                  </View>
+                  
+                  <View style={[s.imageDateTime, { backgroundColor: "#EFF6FFCC", borderColor: "#BFDBFE" }]}>
+                    <Ionicons name="calendar-outline" size={10} color="#3B82F6" />
+                    <Text style={[s.imageDateTimeTxt, { color: "#3B82F6" }]}>{new Date(stats.nextEvent.date).getUTCDate()} {new Date(stats.nextEvent.date).toLocaleDateString('es-ES', { month: 'short', timeZone: 'UTC' }).toUpperCase().replace(".", "")}</Text>
+                    <View style={[s.dateTimeSeparator, { backgroundColor: "#3B82F640" }]} />
+                    <Ionicons name="time-outline" size={10} color="#3B82F6" />
+                    <Text style={[s.imageDateTimeTxt, { color: "#3B82F6" }]}>{formatTimeRange(stats.nextEvent.start_time, stats.nextEvent.end_time)}</Text>
+                  </View>
+
+                  <View style={s.imageCategories}>
+                    {stats.nextEvent.categories?.map((cat) => (
+                      <View key={cat.id} style={[s.imageCat, { backgroundColor: cat.color + '66', borderColor: cat.color }]}>
+                        <Text style={s.imageCatTxt}>{cat.name}</Text>
+                      </View>
+                    ))}
                   </View>
                 </View>
+                
                 <View style={s.eventCardInfo}>
-                  <Text style={s.eventTitle} numberOfLines={1}>{stats.nextEvent.title}</Text>
-                  <View style={s.eventMetaRow}>
-                    <View style={s.eventMetaItem}>
-                      <Ionicons name="location-outline" size={14} color="#64748B" />
-                      <Text style={s.eventMetaTxt}>{stats.nextEvent.location}</Text>
-                    </View>
-                    <View style={s.eventMetaItem}>
-                      <Ionicons name="time-outline" size={14} color="#3B82F6" />
-                      <Text style={s.eventMetaTxt}>{new Date(stats.nextEvent.start_time).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs</Text>
-                    </View>
+                  <Text style={s.eventTitle} numberOfLines={2}>{stats.nextEvent.title}</Text>
+                  <View style={s.locationRow}>
+                    <Ionicons name="location-outline" size={12} color="#94A3B8" />
+                    <Text style={s.locationTxt} numberOfLines={1}>{stats.nextEvent.location}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -203,7 +265,9 @@ export default function ProfileScreen() {
               <View style={s.actionRow}>
                 <TouchableOpacity
                   style={[s.actionBtn, { backgroundColor: "#EEF2FF" }]}
-                  onPress={() => navigation.navigate("EventsTab")}
+                  onPress={() => isOwnProfile && navigation.navigate("MainTabs", { screen: "EventsTab", params: { initialTab: 0 } })}
+                  disabled={!isOwnProfile}
+                  activeOpacity={isOwnProfile ? 0.7 : 1}
                 >
                   <View style={s.actionIconBox}><Ionicons name="search" size={20} color="#4F46E5" /></View>
                   <View>
@@ -216,7 +280,9 @@ export default function ProfileScreen() {
 
                 <TouchableOpacity
                   style={[s.actionBtn, { backgroundColor: "#ECFDF5" }]}
-                  onPress={() => navigation.navigate("EventsTab")}
+                  onPress={() => isOwnProfile && navigation.navigate("MainTabs", { screen: "EventsTab", params: { initialTab: 1 } })}
+                  disabled={!isOwnProfile}
+                  activeOpacity={isOwnProfile ? 0.7 : 1}
                 >
                   <View style={[s.actionIconBox, { backgroundColor: "#10B98120" }]}><Ionicons name="ticket" size={20} color="#10B981" /></View>
                   <View>
@@ -228,7 +294,7 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               </View>
 
-              {isManager && (
+              {isOwnProfile && isManager && (
                 <TouchableOpacity
                   style={[s.actionBtnWide, { backgroundColor: "#FFF7ED" }]}
                   onPress={() => navigation.navigate("CreateEvent")}
@@ -268,15 +334,18 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={s.logoutBtn} onPress={() => {
-            Alert.alert("Cerrar Sesión", "¿Salir?", [{ text: "No" }, { text: "Sí", onPress: logout, style: "destructive" }]);
-          }}>
-            <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-            <Text style={s.logoutTxt}>Cerrar Sesión</Text>
-          </TouchableOpacity>
+
         </View>
       </ScrollView>
-      <SettingsModal visible={settingsVisible} onClose={() => setSettingsVisible(false)} user={user} onUpdate={(u) => setUser(u)} />
+      <SettingsModal 
+        visible={settingsVisible} 
+        onClose={() => setSettingsVisible(false)} 
+        user={activeUser} 
+        onUpdate={(u) => { 
+          setTargetUser(u); 
+          if (updateUserProfileLocally) updateUserProfileLocally(u); 
+        }} 
+      />
     </View>
   );
 }
@@ -291,8 +360,10 @@ const s = StyleSheet.create({
     borderBottomRightRadius: 28,
     elevation: 8,
   },
-  settingsIcon: { alignSelf: "flex-end", padding: 4, marginBottom: 0 },
-  headerContent: { flexDirection: "row", alignItems: "flex-start", gap: 20, marginTop: -10 },
+  topBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 0 },
+  settingsIcon: { padding: 4 },
+  backIcon: { padding: 4 },
+  headerContent: { flexDirection: "row", alignItems: "flex-start", gap: 20, marginTop: 4 },
 
   avatarSection: { alignItems: "center", gap: 4 },
   avatarWrap: { position: "relative" },
@@ -318,17 +389,40 @@ const s = StyleSheet.create({
   rowHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginLeft: 5, marginBottom: 15 },
   mainSectionTitle: { fontSize: 18, fontWeight: "900", color: "#1E293B", letterSpacing: -0.5 },
 
-  eventCard: { backgroundColor: "white", borderRadius: 24, overflow: "hidden", elevation: 5, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 10, borderWidth: 1, borderColor: "#F1F5F9", marginBottom: 12 },
-  eventCardImgBox: { height: 110, position: "relative" },
-  eventCardImg: { ...StyleSheet.absoluteFillObject },
-  eventDateBadge: { position: "absolute", top: 10, left: 10, backgroundColor: "white", borderRadius: 10, padding: 5, alignItems: "center" },
-  eventDateDay: { fontSize: 12, fontWeight: "900", color: "#1E293B" },
-  eventDateMonth: { fontSize: 7, fontWeight: "800", color: "#3B82F6" },
-  eventCardInfo: { padding: 12 },
-  eventTitle: { fontSize: 15, fontWeight: "800", color: "#1E293B", marginBottom: 4 },
-  eventMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  eventMetaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  eventMetaTxt: { fontSize: 11, color: "#64748B", fontWeight: "600" },
+  eventCard: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    marginBottom: 20,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  eventCardImgBox: { height: 140, width: "100%", position: "relative" },
+  eventCardImg: { width: "100%", height: "100%" },
+  statusTag: { 
+    position: "absolute", top: 10, left: 10, flexDirection: "row", alignItems: "center", gap: 4, 
+    paddingHorizontal: 8, height: 22, borderRadius: 11, borderWidth: 1,
+  },
+  statusDot: { width: 4, height: 4, borderRadius: 2 },
+  statusTagTxt: { fontSize: 8, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.5 },
+  imageDateTime: {
+    position: "absolute", top: 10, right: 10, flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 8, height: 22, borderRadius: 11, borderWidth: 1,
+  },
+  imageDateTimeTxt: { fontSize: 8, fontWeight: "900", textTransform: "uppercase" },
+  dateTimeSeparator: { width: 1, height: 8, marginHorizontal: 1 },
+  imageCategories: { position: "absolute", bottom: 10, left: 10, flexDirection: "row", flexWrap: "wrap", gap: 4, maxWidth: '70%' },
+  imageCat: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
+  imageCatTxt: { fontSize: 7, fontWeight: "900", color: "white", textTransform: "uppercase" },
+  eventCardInfo: { padding: 14, paddingTop: 16 },
+  eventTitle: { fontSize: 20, fontWeight: "900", color: "#0F172A", lineHeight: 26, letterSpacing: -0.5 },
+  locationRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  locationTxt: { fontSize: 11, color: "#94A3B8", fontWeight: "600" },
 
   emptyBox: { alignItems: "center", padding: 15, backgroundColor: "white", borderRadius: 20, marginBottom: 12, borderStyle: "dashed", borderWidth: 1, borderColor: "#CBD5E1" },
   emptyBoxTxt: { color: "#94A3B8", fontWeight: "600", fontSize: 12 },

@@ -11,6 +11,7 @@ import FilterChip from "../../shared/components/FilterChip";
 import { getAllUsers, updateUserRole } from "../services/usersService";
 import { assignStateToUser, removeStateFromUser } from "../services/statesService";
 import { useAuth } from "../../auth/context/AuthContext";
+import { useNavigation } from "@react-navigation/native";
 
 const { height } = Dimensions.get("window");
 
@@ -29,6 +30,7 @@ const ROLES_LIST = [
 ];
 
 export default function UserListTab({ states }) {
+  const navigation = useNavigation();
   const { user: currentUser, isAdmin } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -134,7 +136,11 @@ export default function UserListTab({ states }) {
     const statesEditable = canEditStates(item);
 
     return (
-      <View style={[s.userCard, !roleEditable && !statesEditable && s.userCardDisabled]}>
+      <TouchableOpacity 
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate("UserProfile", { userId: item.id })}
+        style={[s.userCard, !roleEditable && !statesEditable && s.userCardDisabled]}
+      >
         {/* Role Badge integrated into the card header area */}
         <View style={s.userRow}>
           <View style={[s.avatar, { backgroundColor: ri.color }]}>
@@ -193,7 +199,7 @@ export default function UserListTab({ states }) {
             </View>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 

@@ -78,9 +78,11 @@ export default function StatesListTab() {
         <TouchableOpacity style={s.actionBtn} onPress={() => { setEditingState(item); setForm({ name: item.name, color: item.color }); setModalVisible(true); }}>
           <Ionicons name="pencil-outline" size={18} color="#64748B" />
         </TouchableOpacity>
-        <TouchableOpacity style={s.actionBtn} onPress={() => handleDelete(item.id)}>
-          <Ionicons name="trash-outline" size={18} color="#EF4444" />
-        </TouchableOpacity>
+        {!item.is_default && (
+          <TouchableOpacity style={s.actionBtn} onPress={() => handleDelete(item.id)}>
+            <Ionicons name="trash-outline" size={18} color="#EF4444" />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -98,7 +100,7 @@ export default function StatesListTab() {
   );
 
   return (
-    <View style={s.container}>
+    <View style={{ flex: 1 }}>
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}
@@ -109,8 +111,13 @@ export default function StatesListTab() {
         ListEmptyComponent={<View style={s.empty}><Ionicons name="layers-outline" size={48} color="#CBD5E1" /><Text style={s.emptyTxt}>No se encontraron estados.</Text></View>}
       />
       <TouchableOpacity style={s.fab} onPress={() => { setEditingState(null); setForm({ name: "", color: "#3B82F6" }); setModalVisible(true); }}>
-        <LinearGradient colors={["#3B82F6", "#2563EB"]} style={s.fabGradient}>
-          <Ionicons name="add" size={32} color="white" />
+        <LinearGradient 
+          colors={["rgba(30, 27, 75, 0.85)", "rgba(49, 46, 129, 0.85)"]} 
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={s.fabGradient}
+        >
+          <Ionicons name="add" size={32} color="rgba(255, 255, 255, 0.9)" />
         </LinearGradient>
       </TouchableOpacity>
 
@@ -214,16 +221,23 @@ const s = StyleSheet.create({
     position: "absolute", 
     bottom: 24, 
     right: 20, 
-    width: 54, 
-    height: 54, 
-    borderRadius: 18, 
-    elevation: 6,
-    shadowColor: "#3B82F6",
+    width: 60, 
+    height: 60, 
+    borderRadius: 30,
+    shadowColor: "#1E1B4B",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.4,
     shadowRadius: 12,
+    elevation: 8,
   },
-  fabGradient: { flex: 1, borderRadius: 18, justifyContent: "center", alignItems: "center" },
+  fabGradient: { 
+    flex: 1, 
+    borderRadius: 30, 
+    justifyContent: "center", 
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
   
   // Modals Premium
   modalOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.4)", justifyContent: "flex-end" },

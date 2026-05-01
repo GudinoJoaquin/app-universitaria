@@ -8,12 +8,30 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { decode } from "base64-arraybuffer";
 import { supabase } from "../../shared/services/supabase";
+import { useAuth } from "../../auth/context/AuthContext";
 
 export default function SettingsModal({ visible, onClose, user, onUpdate }) {
+  const { logout } = useAuth();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [provider, setProvider] = useState("email");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
+  const [showCurrentPwd, setShowCurrentPwd] = useState(false);
+  const [showNewPwd, setShowNewPwd] = useState(false);
+  const [showConfirmPwd, setShowConfirmPwd] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session?.user?.app_metadata?.provider) {
+        setProvider(data.session.user.app_metadata.provider);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (visible && user?.name) {
@@ -28,8 +46,42 @@ export default function SettingsModal({ visible, onClose, user, onUpdate }) {
       Alert.alert("Error", "El nombre es obligatorio");
       return;
     }
+    if (showPasswordSection && (currentPassword || newPassword || confirmPassword)) {
+      if (!currentPassword) {
+        Alert.alert("Error", "Debes ingresar tu contraseña actual para hacer cambios.");
+        return;
+      }
+      if (!newPassword) {
+        Alert.alert("Error", "Debes ingresar una nueva contraseña.");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        Alert.alert("Error", "Las contraseñas nuevas no coinciden.");
+        return;
+      }
+      if (newPassword.length < 6) {
+        Alert.alert("Error", "La nueva contraseña debe tener al menos 6 caracteres.");
+        return;
+      }
+    }
     setLoading(true);
     try {
+      if (showPasswordSection && newPassword) {
+        // Verificar la contraseña actual haciendo un login silencioso
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user.email,
+          password: currentPassword,
+        });
+
+        if (signInError) {
+          throw new Error("La contraseña actual es incorrecta.");
+        }
+
+        // Si es correcta, actualizar a la nueva
+        const { error: pwdError } = await supabase.auth.updateUser({ password: newPassword });
+        if (pwdError) throw pwdError;
+      }
+
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
       const { error } = await supabase
         .from("profiles")
@@ -37,6 +89,15 @@ export default function SettingsModal({ visible, onClose, user, onUpdate }) {
         .eq("id", user.id);
 
       if (error) throw error;
+
+      if (showPasswordSection && newPassword) {
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setShowPasswordSection(false);
+        Alert.alert("¡Éxito!", "La contraseña ha sido actualizada correctamente.");
+      }
+
       onUpdate({ ...user, name: fullName });
       onClose();
     } catch (e) {
@@ -154,12 +215,94 @@ export default function SettingsModal({ visible, onClose, user, onUpdate }) {
                   <Text style={s.infoBoxTxt}>{user?.email}</Text>
                 </View>
 
+                {provider === "email" && (
+                  <View style={s.passwordSection}>
+                    <TouchableOpacity 
+                      style={s.passwordToggle} 
+                      onPress={() => setShowPasswordSection(!showPasswordSection)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={s.passwordToggleLeft}>
+                        <Ionicons name="lock-closed-outline" size={18} color="#6366F1" />
+                        <Text style={s.passwordToggleTxt}>Cambiar contraseña</Text>
+                      </View>
+                      <Ionicons name={showPasswordSection ? "chevron-up" : "chevron-down"} size={18} color="#94A3B8" />
+                    </TouchableOpacity>
+
+                    {showPasswordSection && (
+                      <View style={s.passwordFields}>
+                        <View style={s.inputGroup}>
+                          <Text style={s.label}>Contraseña actual</Text>
+                          <View style={s.passwordInputWrap}>
+                            <TextInput 
+                              style={s.inputWithIcon}
+                              value={currentPassword}
+                              onChangeText={setCurrentPassword}
+                              placeholder="Tu contraseña actual"
+                              placeholderTextColor="#94A3B8"
+                              secureTextEntry={!showCurrentPwd}
+                            />
+                            <TouchableOpacity style={s.eyeIcon} onPress={() => setShowCurrentPwd(!showCurrentPwd)}>
+                              <Ionicons name={showCurrentPwd ? "eye-off" : "eye"} size={20} color="#94A3B8" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        <View style={s.inputGroup}>
+                          <Text style={s.label}>Nueva contraseña</Text>
+                          <View style={s.passwordInputWrap}>
+                            <TextInput 
+                              style={s.inputWithIcon}
+                              value={newPassword}
+                              onChangeText={setNewPassword}
+                              placeholder="Mínimo 6 caracteres"
+                              placeholderTextColor="#94A3B8"
+                              secureTextEntry={!showNewPwd}
+                            />
+                            <TouchableOpacity style={s.eyeIcon} onPress={() => setShowNewPwd(!showNewPwd)}>
+                              <Ionicons name={showNewPwd ? "eye-off" : "eye"} size={20} color="#94A3B8" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        <View style={s.inputGroup}>
+                          <Text style={s.label}>Confirmar contraseña</Text>
+                          <View style={s.passwordInputWrap}>
+                            <TextInput 
+                              style={s.inputWithIcon}
+                              value={confirmPassword}
+                              onChangeText={setConfirmPassword}
+                              placeholder="Repite la nueva contraseña"
+                              placeholderTextColor="#94A3B8"
+                              secureTextEntry={!showConfirmPwd}
+                            />
+                            <TouchableOpacity style={s.eyeIcon} onPress={() => setShowConfirmPwd(!showConfirmPwd)}>
+                              <Ionicons name={showConfirmPwd ? "eye-off" : "eye"} size={20} color="#94A3B8" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                )}
+
                 <TouchableOpacity 
                   style={[s.saveBtn, loading && s.saveBtnDisabled]} 
                   onPress={handleSave}
                   disabled={loading}
                 >
                   {loading ? <ActivityIndicator color="white" /> : <Text style={s.saveBtnTxt}>Guardar cambios</Text>}
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={s.logoutBtn} 
+                  onPress={() => {
+                    Alert.alert("Cerrar Sesión", "¿Salir?", [
+                      { text: "No", style: "cancel" }, 
+                      { text: "Sí", onPress: logout, style: "destructive" }
+                    ]);
+                  }}
+                >
+                  <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+                  <Text style={s.logoutTxt}>Cerrar Sesión</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -254,6 +397,25 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1F5F9"
   },
+  passwordInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC", 
+    borderRadius: 14, 
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  inputWithIcon: {
+    flex: 1,
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    fontSize: 15, 
+    color: "#1E293B",
+    fontWeight: "600",
+  },
+  eyeIcon: {
+    padding: 12,
+  },
   infoBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -265,6 +427,38 @@ const s = StyleSheet.create({
     borderColor: "#F1F5F9",
   },
   infoBoxTxt: { fontSize: 13, color: "#94A3B8", fontWeight: "500" },
+  
+  passwordSection: {
+    backgroundColor: "white",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  passwordToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+    backgroundColor: "#F8FAFC",
+  },
+  passwordToggleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  passwordToggleTxt: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  passwordFields: {
+    padding: 14,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  
   saveBtn: { 
     backgroundColor: "#0F172A", 
     paddingVertical: 16, 
@@ -274,4 +468,17 @@ const s = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.7 },
   saveBtnTxt: { color: "white", fontSize: 15, fontWeight: "800" },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEF2F2",
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+  },
+  logoutTxt: { color: "#EF4444", fontSize: 15, fontWeight: "800" },
 });
